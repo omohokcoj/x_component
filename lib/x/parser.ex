@@ -1,9 +1,4 @@
 defmodule X.Parser do
-  @type leaf :: {
-          token :: X.Ast.token(),
-          children :: [leaf()]
-        }
-
   defguard is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
 
   def call(tokens) do
@@ -39,6 +34,10 @@ defmodule X.Parser do
       _ ->
         throw([:error, cur, scope, name])
     end
+  end
+
+  defp parse([token = {:tag_comment, _, _} | tail], scope, acc) do
+    parse(tail, scope, [{token, []} | acc])
   end
 
   defp parse([], _, acc) do

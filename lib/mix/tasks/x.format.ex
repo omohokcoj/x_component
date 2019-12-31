@@ -8,6 +8,7 @@ defmodule Mix.Tasks.X.Format do
     dot_formatter: :string
   ]
 
+  @impl true
   def run(args) do
     {opts, args} = OptionParser.parse!(args, strict: @switches)
     {dot_formatter, formatter_opts} = eval_dot_formatter(opts)
@@ -147,7 +148,6 @@ defmodule Mix.Tasks.X.Format do
 
   defp write_file(file, input, output) do
     cond do
-      file == :stdin -> IO.write(output)
       input == output -> :ok
       true -> File.write!(file, output)
     end

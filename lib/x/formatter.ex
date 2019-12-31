@@ -2,6 +2,7 @@ defmodule X.Formatter do
   alias Inspect.Algebra, as: A
 
   @script_tags ['script', 'style']
+  @directives [:if, :elseif, :for, :unless]
 
   def call(tree, options \\ []) do
     tree
@@ -74,7 +75,11 @@ defmodule X.Formatter do
     to_string(text)
   end
 
-  defp format({expr, _, value}) when expr in [:if, :elseif, :for, :unless] do
+  defp format({{:tag_comment, _, text}, _}) do
+    A.concat(A.line(), "<!#{text}>")
+  end
+
+  defp format({expr, _, value}) when expr in @directives do
     ~s(x-#{expr}="#{format_code(value)}")
   end
 
@@ -90,15 +95,14 @@ defmodule X.Formatter do
     delimiter =
       case value do
         '%{' ++ _ -> ""
-        [?{ | _] -> ""
-        [?[ | _] -> ""
-        [?" | _] -> "'"
-        _ -> <<?">>
+        [char | _] when char in '{[' -> ""
+        _ -> if(Enum.any?(value, &(&1 == ?")), do: "'", else: <<?">>)
       end
 
     value = if(is_dynamic, do: format_code(value), else: value)
 
-    "#{if(is_dynamic, do: ":")}#{name}=" <> delimiter <> to_string(value) <> delimiter
+    if(is_dynamic, do: ":", else: "") <>
+      to_string(name) <> "=" <> delimiter <> to_string(value) <> delimiter
   end
 
   defp format_tag_head({:tag_start, _, name, attrs, condition, iterator, _, _, _}) do
@@ -183,9 +187,9 @@ defmodule X.Formatter do
 
     id_attrs
     |> Kernel.++([condition, iterator])
+    |> Enum.filter(& &1)
     |> Kernel.++(dynamic_attrs)
     |> Kernel.++(regular_attrs)
-    |> Enum.filter(& &1)
   end
 
   defp singleline?(children) do
