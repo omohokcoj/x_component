@@ -2,6 +2,7 @@ defmodule X.FormatterTest do
   use ExUnit.Case
 
   @template """
+  <!DOCTYPE html>
   <div  x-for="a <- [123,123]" asd="asd" id="asd" :asd="asd"  x-if="true">
   <div asd="asd" asd="asd">
     <div asd="asd">
@@ -33,6 +34,7 @@ defmodule X.FormatterTest do
     tree = X.Parser.call(tokens)
     doc = X.Formatter.call(tree)
     assert doc == ~s(
+<!DOCTYPE html>
 <div
   id="asd"
   x-if="true"

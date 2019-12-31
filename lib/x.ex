@@ -36,14 +36,4 @@ defmodule X do
     |> X.Parser.call()
     |> X.Formatter.call(options)
   end
-
-  def render(args) do
-    cond do
-      component = Access.get(args, :component) ->
-        apply(component, :render, [Access.get(args, :assigns)])
-
-      true ->
-        ""
-    end
-  end
 end

@@ -57,6 +57,14 @@ defmodule X.Tokenizer do
     tokenize(list, cur, [token | acc])
   end
 
+  defp tokenize('<!' ++ tail, {col, row}, acc) do
+    {data, list, cur} = extract_value(tail, {col + 2, row}, '>', false)
+
+    token = {:tag_comment, {col, row}, data}
+
+    tokenize(list, cur, [token | acc])
+  end
+
   defp tokenize([?<, next | tail], {col, row}, acc) do
     cond do
       is_letter(next) ->
@@ -69,18 +77,10 @@ defmodule X.Tokenizer do
     end
   end
 
-  defp tokenize([?\n | next], {col, row}, acc) do
-    {text, is_blank, list, cur} = extract_tag_text(next, {1, row + 1})
+  defp tokenize([char | tail], cur = {col, row}, acc) do
+    {text, is_blank, list, cur} = extract_tag_text(tail, next_cursor(char, cur))
 
-    token = {:tag_text, {col, row}, [?\n | text], true, is_blank}
-
-    tokenize(list, cur, [token | acc])
-  end
-
-  defp tokenize(list = [char | _], {col, row}, acc) do
-    {text, is_blank, list, cur} = extract_tag_text(list, {col, row})
-
-    token = {:tag_text, {col, row}, text, is_whitespace(char), is_blank}
+    token = {:tag_text, {col, row}, [char | text], is_whitespace(char), is_blank}
 
     tokenize(list, cur, [token | acc])
   end

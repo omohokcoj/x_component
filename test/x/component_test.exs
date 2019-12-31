@@ -6,20 +6,26 @@ defmodule X.ComponentTest do
 
     use X.Template
 
-    def render(assigns) do
+    def render(assigns, do: yield) do
       ~X"""
-      <meta scr="as">
-      <div asd="asd">1</div>
+      <meta
+        :attrs="@attrs"
+        scr="as"
+      >
+      <div asd="asd"></div>
       <div x-if="false">
         2asdfgh
         ert
       </div>
-        <span x-else> 3 </span>
+      <X
+        x-else
+        :is="test"
+      > {{ @listing }} {{  }} </X>
       """
     end
 
     def test() do
-      %{test: true, devo: false}
+      "di"
     end
 
     def fest() do
@@ -32,25 +38,31 @@ defmodule X.ComponentTest do
     alias List.Chars
 
     use X.Component,
-      attrs: [
-        :message,
-        :listing
-      ],
+      assigns: %{
+        message: String.t(),
+        listing: Chars.t()
+      },
       template: ~X"""
       <Listing
+        :assigns="igns()"
+        :attrs=[{"asd", 1}]
         :class="listing"
-        :listing="listing"
-        :style=[reverse("asd")]
+        style="asd"
       >
+        123 {{ @yield }}
       </Listing>
       """
 
+    def igns do
+      %{listing: test()}
+    end
+
     def test do
-      to_string(Chars.to_charlist())
+      "asd"
     end
   end
 
   test "greets the world" do
-    IO.puts(Hello.render(message: "asd", listing: "321"))
+    IO.puts(Hello.render(%{message: "asd", listing: "321"}, do: "Hello"))
   end
 end

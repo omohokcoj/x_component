@@ -1,11 +1,22 @@
 defmodule X.Html do
-  @escapes [
+  @escape_chars [
     {?<, "&lt;"},
     {?>, "&gt;"},
     {?&, "&amp;"},
     {?", "&quot;"},
     {?', "&#39;"}
   ]
+
+  def attrs_to_string(attrs) do
+    io_list =
+      Enum.reduce(attrs, :first, fn {key, value}, acc ->
+        attr_list = [to_string(key), '="', escape(attr_to_string(value)), '"']
+
+        if(acc == :first, do: attr_list, else: [attr_list, ?\s | acc])
+      end)
+
+    IO.iodata_to_binary(io_list)
+  end
 
   def attr_to_string(attr = %{__struct__: _}) do
     to_string(attr)
@@ -16,16 +27,16 @@ defmodule X.Html do
       is_map(attr) or Keyword.keyword?(attr) ->
         attr
         |> Enum.reduce([], fn {key, value}, acc ->
-          (value && acc ++ [key]) || acc
+          (value && [key | acc]) || acc
         end)
         |> Enum.uniq()
         |> Enum.join(" ")
 
       is_list(attr) ->
-        attr |> Enum.uniq() |> Enum.join(" ")
+        attr |> Enum.join(" ")
 
       is_tuple(attr) ->
-        attr |> Tuple.to_list() |> Enum.uniq() |> Enum.join(" ")
+        attr |> Tuple.to_list() |> Enum.join(" ")
 
       is_binary(attr) ->
         String.trim(attr)
@@ -33,7 +44,6 @@ defmodule X.Html do
       true ->
         to_string(attr)
     end
-    |> escape()
   end
 
   # https://github.com/elixir-plug/plug/blob/master/lib/plug/html.ex
@@ -42,7 +52,7 @@ defmodule X.Html do
     IO.iodata_to_binary(to_iodata(data, 0, data, []))
   end
 
-  for {match, insert} <- @escapes do
+  for {match, insert} <- @escape_chars do
     defp to_iodata(<<unquote(match), rest::bits>>, skip, original, acc) do
       to_iodata(rest, skip + 1, original, [acc | unquote(insert)])
     end
@@ -56,7 +66,7 @@ defmodule X.Html do
     acc
   end
 
-  for {match, insert} <- @escapes do
+  for {match, insert} <- @escape_chars do
     defp to_iodata(<<unquote(match), rest::bits>>, skip, original, acc, len) do
       part = binary_part(original, skip, len)
       to_iodata(rest, skip + len + 1, original, [acc, part | unquote(insert)])

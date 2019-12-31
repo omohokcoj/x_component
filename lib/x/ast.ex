@@ -26,6 +26,12 @@ defmodule X.Ast do
           value :: Chars.t()
         }
 
+  @type tag_comment() :: {
+          :tag_comment,
+          cursor :: cursor(),
+          value :: Chars.t()
+        }
+
   @type tag_start() :: {
           :tag_start,
           cursor :: cursor(),
@@ -63,6 +69,11 @@ defmodule X.Ast do
           :text_group,
           cursor :: cursor(),
           tag_name :: Chars.t()
+        }
+
+  @type leaf :: {
+          token :: token(),
+          children :: [leaf()]
         }
 
   @type token() :: tag_start() | tag_end() | tag_text() | tag_output() | text_group()

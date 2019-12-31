@@ -76,7 +76,7 @@ Benchee.run(%{
     end
   },
   parallel: 1,
-  warmup: 1,
-  time: 1,
+  warmup: 3,
+  time: 10,
   print: [fast_warning: false]
 )

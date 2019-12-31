@@ -1,6 +1,6 @@
 defmodule XComponentBench  do
   use X.Component,
-    attrs: [
+    assigns: [
       :site_title, :arr
     ],
     template: ~X"""
@@ -64,7 +64,7 @@ end
 
 Benchee.run(%{
     "X" => fn ->
-      XComponentBench.render(site_title: "Hello", arr: [1,2,3])
+      XComponentBench.render(%{site_title: "Hello", arr: [1,2,3]})
     end,
     "EEx" => fn ->
       EExBench.eex("Hello", [1,2,3])
