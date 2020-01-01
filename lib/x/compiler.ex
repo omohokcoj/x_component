@@ -46,15 +46,15 @@ defmodule X.Compiler do
     end
   end
 
-  defp compile({{:tag_output, _, body, true}, _}, env) do
+  defp compile({{:tag_output, cur, body, true}, _}, env) do
     quote do
-      X.Html.escape(Kernel.to_string(unquote(compile_expr(body, env))))
+      X.Html.escape(Kernel.to_string(unquote(compile_expr(body, cur, env))))
     end
   end
 
-  defp compile({{:tag_output, _, body, false}, _}, env) do
+  defp compile({{:tag_output, cur, body, false}, _}, env) do
     quote do
-      Kernel.to_string(unquote(compile_expr(body, env)))
+      Kernel.to_string(unquote(compile_expr(body, cur, env)))
     end
   end
 
@@ -93,7 +93,7 @@ defmodule X.Compiler do
     end
   end
 
-  defp compile({{:tag_start, _, @special_tag_name, attrs, _, _, _, _, true}, children}, env) do
+  defp compile({{:tag_start, cur, @special_tag_name, attrs, _, _, _, _, true}, children}, env) do
     {component, is_tag, attrs} =
       Enum.reduce(attrs, {nil, nil, []}, fn
         {:tag_attr, _, 'component', value, true}, {_, is_tag, acc} -> {value, is_tag, acc}
@@ -105,10 +105,10 @@ defmodule X.Compiler do
 
     cond do
       component ->
-        compile_component(component, attrs, children, env)
+        compile_component(component, attrs, children, cur, env)
 
       is_tag ->
-        tag_ast = compile_expr(is_tag, env)
+        tag_ast = compile_expr(is_tag, cur, env)
         attrs_ast = compile_attrs(Enum.reverse(attrs), env)
 
         quote do
@@ -129,8 +129,8 @@ defmodule X.Compiler do
     end
   end
 
-  defp compile({{:tag_start, _, tag_name, attrs, _, _, _, _, true}, children}, env) do
-    compile_component(tag_name, attrs, children, env)
+  defp compile({{:tag_start, cur, tag_name, attrs, _, _, _, _, true}, children}, env) do
+    compile_component(tag_name, attrs, children, cur, env)
   end
 
   defp compile({{:tag_comment, _, body}, _}, _env) do
@@ -141,16 +141,17 @@ defmodule X.Compiler do
     Enum.map(attrs, &compile_attr(&1, env))
   end
 
-  defp compile_attr({:tag_attr, _cur, @attrs_key_name, value, true}, env) do
-    attrs_ast = quote(do: Html.attrs_to_string(unquote(compile_expr(value, env))))
+  defp compile_attr({:tag_attr, cur, @attrs_key_name, value, true}, env) do
+    attrs_ast = quote(do: Html.attrs_to_string(unquote(compile_expr(value, cur, env))))
 
     quote do
       <<?\s, unquote(attrs_ast)::binary>>
     end
   end
 
-  defp compile_attr({:tag_attr, _cur, name, value, true}, env) do
-    value_ast = quote(do: Html.escape(Html.attr_to_string(unquote(compile_expr(value, env)))))
+  defp compile_attr({:tag_attr, cur, name, value, true}, env) do
+    value_ast =
+      quote(do: Html.escape(Html.attr_to_string(unquote(compile_expr(value, cur, env)))))
 
     quote do
       <<?\s, unquote(:erlang.iolist_to_binary(name))::binary, ?=, ?", unquote(value_ast)::binary,
@@ -175,10 +176,10 @@ defmodule X.Compiler do
 
   defp compile_assigns(attrs, env) do
     {assigns, attrs, assigns_list, attrs_list} =
-      Enum.reduce(attrs, {nil, nil, [], []}, fn {_, _cur, name, value, is_dynamic},
+      Enum.reduce(attrs, {nil, nil, [], []}, fn {_, cur, name, value, is_dynamic},
                                                 {assigns, attrs, assigns_acc, attrs_acc} ->
         if is_dynamic do
-          value = compile_expr(value, env)
+          value = compile_expr(value, cur, env)
 
           case name do
             @assigns_key_name -> {value, attrs, assigns_acc, attrs_acc}
@@ -211,7 +212,7 @@ defmodule X.Compiler do
     compile_cond_expr({:if, cur, '!(' ++ expr ++ ')'}, ast, tail, env)
   end
 
-  defp compile_cond_expr(condition = {:if, _cur, expr}, ast, tail, env) do
+  defp compile_cond_expr(condition = {:if, cur, expr}, ast, tail, env) do
     {else_ast, tail} =
       case tail do
         [next = {{:tag_start, _, _, _, {:else, _cur, _}, _, _, _, _}, _} | rest] ->
@@ -229,13 +230,13 @@ defmodule X.Compiler do
 
     ast =
       quote do
-        if(unquote(compile_expr(expr, env)), do: unquote(ast), else: unquote(else_ast))
+        if(unquote(compile_expr(expr, cur, env)), do: unquote(ast), else: unquote(else_ast))
       end
 
     {ast, tail}
   end
 
-  defp compile_for_expr({:for, _cur, expr}, ast, env) do
+  defp compile_for_expr({:for, cur, expr}, ast, env) do
     expr =
       case expr do
         '[' ++ expr -> expr
@@ -243,12 +244,12 @@ defmodule X.Compiler do
       end
 
     quote do
-      for(unquote_splicing(compile_expr(expr, env)), do: unquote(ast), into: <<>>)
+      for(unquote_splicing(compile_expr(expr, cur, env)), do: unquote(ast), into: <<>>)
     end
   end
 
-  defp compile_expr(charlist, _env) do
-    quoted = Code.string_to_quoted!(charlist)
+  defp compile_expr(charlist, {_, row}, env) do
+    quoted = Code.string_to_quoted!(charlist, line: row + env[:line])
 
     Macro.postwalk(quoted, fn
       {:@, meta, [{name, _, atom}]} when is_atom(name) and is_atom(atom) ->
@@ -265,8 +266,8 @@ defmodule X.Compiler do
     end)
   end
 
-  defp compile_component(component, attrs, children, env) do
-    component_ast = compile_expr(component, env)
+  defp compile_component(component, attrs, children, cur, env) do
+    component_ast = compile_expr(component, cur, env)
 
     assigns_ast = compile_assigns(attrs, env)
 

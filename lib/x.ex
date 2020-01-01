@@ -1,19 +1,13 @@
 defmodule X do
-  defmodule SyntaxError do
-    defexception [:message, :file, :line]
-
-    def message(exception) do
-      "#{exception.file}:#{exception.line}: #{exception.message}"
-    end
-  end
-
   @format_sigil_regexp ~r/(\n[^\n]*?~X\""")\n+(.*?)\"""/s
 
-  def compile_string!(source, options \\ []) when is_binary(source) and is_list(options) do
+  def compile_string!(source, env \\ []) when is_binary(source) and is_list(env) do
     source
     |> X.Tokenizer.call()
     |> X.Parser.call()
-    |> X.Compiler.call(options)
+    |> X.Compiler.call(env)
+  catch
+    exception -> process_exception(exception, env)
   end
 
   def format_file!(file) when is_binary(file) do
@@ -35,5 +29,26 @@ defmodule X do
     |> X.Tokenizer.call()
     |> X.Parser.call()
     |> X.Formatter.call(options)
+  end
+
+  defp process_exception({:unexpected_tag, {_, row}, nil, actual_tag}, env) do
+    raise SyntaxError,
+      description: "Unexpected tag close '#{actual_tag}'",
+      line: row + env[:line],
+      file: env[:file]
+  end
+
+  defp process_exception({:unexpected_tag, {_, row}, expected_tag, actual_tag}, env) do
+    raise SyntaxError,
+      description: "Unexpected tag: expected tag '#{expected_tag}' but got '#{actual_tag}'",
+      line: row + env[:line],
+      file: env[:file]
+  end
+
+  defp process_exception({:unexpected_token, {_, row}, char}, env) do
+    raise SyntaxError,
+      description: "Unexpected token at '#{<<char>>}'",
+      line: row + env[:line],
+      file: env[:file]
   end
 end

@@ -2,7 +2,9 @@ defmodule X.Parser do
   defguard is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
 
   def call(tokens) do
-    parse(tokens, nil, [])
+    {result, _} = parse(tokens, nil, [])
+
+    result
   end
 
   defp parse(list = [token | _], scope, acc) when is_text_token(token) do
@@ -32,7 +34,7 @@ defmodule X.Parser do
         {Enum.reverse(acc), tail}
 
       _ ->
-        throw([:error, cur, scope, name])
+        throw({:unexpected_tag, cur, scope, name})
     end
   end
 
@@ -41,7 +43,7 @@ defmodule X.Parser do
   end
 
   defp parse([], _, acc) do
-    Enum.reverse(acc)
+    {Enum.reverse(acc), []}
   end
 
   defp parse_text_group(list) do

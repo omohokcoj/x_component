@@ -3,7 +3,7 @@ defmodule X.Tokenizer do
   alias List.Chars
 
   @whitespace ' \n\r\t'
-  @namechar '.-_'
+  @namechar '.-_:'
 
   @singleton_tags ~w[
     area base br col embed hr
@@ -73,7 +73,7 @@ defmodule X.Tokenizer do
         tokenize(list, cur, [token | acc])
 
       true ->
-        {:error, {col, row}}
+        throw({:unexpected_token, {col, row}, next})
     end
   end
 
@@ -110,11 +110,14 @@ defmodule X.Tokenizer do
           {Chars.t(), Chars.t(), Ast.cursor()}
   defp extract_tag_output(list, {col, row}, acc \\ []) do
     case list do
-      [char, next | tail] when [char, next] != '}}' ->
+      '}}' ++ tail ->
+        {Enum.reverse(acc), tail, {col + 2, row}}
+
+      [char, next | tail] ->
         extract_tag_output([next | tail], next_cursor(char, {col, row}), [char | acc])
 
-      [_, _ | tail] ->
-        {Enum.reverse(acc), tail, {col + 2, row}}
+      [char | _] ->
+        throw({:unexpected_token, {col, row}, char})
     end
   end
 
@@ -201,8 +204,8 @@ defmodule X.Tokenizer do
         [char | _] when is_namechar(char) ->
           {false, extract_name(list, {col, row})}
 
-        _ ->
-          {:error, {col, row}}
+        [char | _] ->
+          throw({:unexpected_token, {col, row}, char})
       end
 
     {value, list, cur} = extract_attr_value(list, cur)
@@ -235,8 +238,8 @@ defmodule X.Tokenizer do
       [char | _] when is_whitespace(char) or char in '/>' ->
         {[], list, {col, row}}
 
-      _ ->
-        {:error, {col, row}}
+      [char | _] ->
+        throw({:unexpected_token, {col, row}, char})
     end
   end
 
@@ -262,7 +265,7 @@ defmodule X.Tokenizer do
     case list do
       '/>' ++ rest -> {true, rest, {col + 2, row}}
       [?> | rest] -> {false, rest, {col + 1, row}}
-      _ -> :error
+      [char | _] -> throw({:unexpected_token, {col, row}, char})
     end
   end
 

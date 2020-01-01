@@ -12,7 +12,7 @@ defmodule X.ComponentTest do
         :attrs="@attrs"
         scr="as"
       >
-      <div asd="asd"></div>
+      <div asd="asd" />
       <div x-if="false">
         2asdfgh
         ert

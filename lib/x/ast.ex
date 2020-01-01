@@ -76,5 +76,5 @@ defmodule X.Ast do
           children :: [leaf()]
         }
 
-  @type token() :: tag_start() | tag_end() | tag_text() | tag_output() | text_group()
+  @type token() :: tag_start() | tag_end() | tag_text() | tag_output() | text_group() | tag_comment()
 end
