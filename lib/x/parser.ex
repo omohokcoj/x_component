@@ -1,12 +1,16 @@
 defmodule X.Parser do
+  alias X.Ast
+
   defguard is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
 
+  @spec call([Ast.token()]) :: [Ast.leaf()]
   def call(tokens) do
     {result, _} = parse(tokens, nil, [])
 
     result
   end
 
+  @spec parse([Ast.token()], charlist() | nil, [Ast.leaf()]) :: {[Ast.leaf()], [Ast.token()]}
   defp parse(list = [token | _], scope, acc) when is_text_token(token) do
     {children, rest} = parse_text_group(list)
     [{head, _} | _] = children
@@ -46,10 +50,12 @@ defmodule X.Parser do
     {Enum.reverse(acc), []}
   end
 
+  @spec parse_text_group([Ast.token()]) :: {[Ast.leaf()], [Ast.token()]}
   defp parse_text_group(list) do
     parse_text_group(list, [])
   end
 
+  @spec parse_text_group([Ast.token()], [Ast.leaf()]) :: {[Ast.leaf()], [Ast.token()]}
   defp parse_text_group(list = [token | tail], acc) do
     cond do
       is_text_token(token) ->

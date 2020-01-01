@@ -1,6 +1,5 @@
 defmodule X.Tokenizer do
   alias X.Ast
-  alias List.Chars
 
   @whitespace ' \n\r\t'
   @namechar '.-_:'
@@ -19,6 +18,7 @@ defmodule X.Tokenizer do
   defguard is_literal(char) when is_letter(char) or is_digit(char)
   defguard is_namechar(char) when is_literal(char) or char in @namechar
 
+  @spec call(charlist() | String.t()) :: [Ast.token()]
   def call(html) when is_list(html) do
     tokenize(html, {1, 1}, [])
   end
@@ -29,6 +29,7 @@ defmodule X.Tokenizer do
     |> call()
   end
 
+  @spec tokenize(charlist(), Ast.cursor(), [Ast.token()]) :: [Ast.token()]
   defp tokenize([], _col, acc) do
     Enum.reverse(acc)
   end
@@ -85,8 +86,8 @@ defmodule X.Tokenizer do
     tokenize(list, cur, [token | acc])
   end
 
-  @spec extract_tag_text(Chars.t(), Ast.cursor(), Chars.t()) ::
-          {Chars.t(), boolean(), Chars.t(), Ast.cursor()}
+  @spec extract_tag_text(charlist(), Ast.cursor(), charlist()) ::
+          {charlist(), boolean(), charlist(), Ast.cursor()}
   defp extract_tag_text(list, {col, row}, acc \\ [], is_blank \\ true) do
     case list do
       [char, next | tail] when char != ?< and [char, next] != '{{' and char != ?\n ->
@@ -106,8 +107,8 @@ defmodule X.Tokenizer do
     end
   end
 
-  @spec extract_tag_output(Chars.t(), Ast.cursor(), Chars.t()) ::
-          {Chars.t(), Chars.t(), Ast.cursor()}
+  @spec extract_tag_output(charlist(), Ast.cursor(), charlist()) ::
+          {charlist(), charlist(), Ast.cursor()}
   defp extract_tag_output(list, {col, row}, acc \\ []) do
     case list do
       '}}' ++ tail ->
@@ -121,7 +122,7 @@ defmodule X.Tokenizer do
     end
   end
 
-  @spec extract_tag_end(Chars.t(), Ast.cursor()) :: {Ast.tag_end(), Chars.t(), Ast.cursor()}
+  @spec extract_tag_end(charlist(), Ast.cursor()) :: {Ast.tag_end(), charlist(), Ast.cursor()}
   defp extract_tag_end(list, {col, row}) do
     {name, list, cur} = extract_name(list, {col + 2, row})
     {false, list, cur} = extract_tag_close(list, cur)
@@ -129,7 +130,7 @@ defmodule X.Tokenizer do
     {{:tag_end, {col, row}, name}, list, cur}
   end
 
-  @spec extract_tag_start(Chars.t(), Ast.cursor()) :: {Ast.tag_start(), Chars.t(), Ast.cursor()}
+  @spec extract_tag_start(charlist(), Ast.cursor()) :: {Ast.tag_start(), charlist(), Ast.cursor()}
   defp extract_tag_start(list, {col, row}) do
     {name, list, cur} = extract_name(list, {col + 1, row})
     {attrs, condition, iterator, list, cur} = extract_tag_attributes(list, cur)
@@ -149,7 +150,8 @@ defmodule X.Tokenizer do
     }
   end
 
-  @spec extract_name(Chars.t(), Ast.cursor(), Chars.t()) :: {Chars.t(), Chars.t(), Ast.cursor()}
+  @spec extract_name(charlist(), Ast.cursor(), charlist()) ::
+          {charlist(), charlist(), Ast.cursor()}
   defp extract_name(list = [char | rest], {col, row}, acc \\ []) do
     cond do
       is_namechar(char) -> extract_name(rest, {col + 1, row}, [char | acc])
@@ -157,6 +159,15 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec extract_tag_attributes(
+          charlist(),
+          Ast.cursor(),
+          [Ast.tag_attr()],
+          Ast.tag_condition() | nil,
+          Ast.tag_iterator() | nil
+        ) ::
+          {[Ast.tag_attr()], Ast.tag_condition() | nil, Ast.tag_iterator() | nil, charlist(),
+           Ast.cursor()}
   defp extract_tag_attributes(list, cur, attrs \\ [], condition \\ nil, iterator \\ nil) do
     {list, {col, row}} = skip_whitespace(list, cur)
 
@@ -195,6 +206,7 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec extract_attribute(charlist(), Ast.cursor()) :: {Ast.tag_attr(), charlist(), Ast.cursor()}
   defp extract_attribute(list, {col, row}) do
     {is_dynamic, {name, list, cur}} =
       case list do
@@ -215,6 +227,7 @@ defmodule X.Tokenizer do
     {{:tag_attr, {col, row}, name, value, is_dynamic}, list, cur}
   end
 
+  @spec extract_attr_value(charlist(), Ast.cursor()) :: {charlist(), charlist(), Ast.cursor()}
   defp extract_attr_value(list, {col, row}) do
     case list do
       '=%{' ++ rest ->
@@ -243,6 +256,8 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec extract_value(charlist(), Ast.cursor(), charlist(), boolean(), charlist()) ::
+          {charlist(), charlist(), Ast.cursor()}
   defp extract_value([char | rest], {col, row}, terminator, include_terminator, acc \\ []) do
     cur = next_cursor(char, {col, row})
 
@@ -261,6 +276,7 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec extract_tag_close(charlist(), Ast.cursor()) :: {boolean(), charlist(), Ast.cursor()}
   defp extract_tag_close(list, {col, row}) do
     case list do
       '/>' ++ rest -> {true, rest, {col + 2, row}}
@@ -269,6 +285,7 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec skip_whitespace(charlist(), Ast.cursor()) :: {charlist(), Ast.cursor()}
   defp skip_whitespace(list, {col, row}) do
     case list do
       [?\n | rest] ->
@@ -282,6 +299,7 @@ defmodule X.Tokenizer do
     end
   end
 
+  @spec next_cursor(integer(), Ast.cursor()) :: Ast.cursor()
   defp next_cursor(char, {col, row}) do
     case char do
       ?\n -> {1, row + 1}

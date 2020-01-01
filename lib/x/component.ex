@@ -1,48 +1,57 @@
 defmodule X.Component do
-  defmacro __using__(args) do
-    {template_ast, template} = fetch_template(args)
-    assigns = fetch_assigns(args, __CALLER__)
-    component_doc = build_component_doc(template, assigns)
+  @type options() :: [
+          {:assigns, map() | [atom()]}
+          | {:template, Macro.t()}
+        ]
+
+  defmacro __using__(options) when is_list(options) do
+    {template_ast, template} = fetch_template(options)
+    assigns_ast = fetch_assigns(options, __CALLER__)
+    component_doc = build_component_doc(template, assigns_ast)
 
     quote do
       use X.Template
 
-      @moduledoc X.Component.merge_docs(@moduledoc, unquote(component_doc))
+      @moduledoc if @moduledoc,
+                   do: Enum.join([@moduledoc, unquote(component_doc)], "\n"),
+                   else: unquote(component_doc)
 
+      @spec template() :: String.t()
       def template do
         unquote(template)
       end
 
-      X.Component.define_render_function(unquote(template_ast), unquote(assigns))
+      X.Component.define_render_functions(unquote(template_ast), unquote(assigns_ast))
     end
   end
 
-  defmacro define_render_function(template, assigns) do
-    assigns_typespec = build_assigns_typespec(assigns)
-    assigns_ast = build_assigns_ast(assigns)
+  defmacro define_render_functions(template_ast, assigns_ast) do
+    assigns_typespec = build_assigns_typespec(assigns_ast)
+    assigns_vars_ast = build_assigns_vars_ast(assigns_ast)
 
     quote do
-      @spec render(unquote(assigns_typespec)) :: binary()
+      @spec render(unquote(assigns_typespec)) :: String.t()
       def render(var!(assigns)) do
         var!(yield) = nil
         _ = var!(yield)
         _ = var!(assigns)
-        unquote(assigns_ast)
-        unquote(template)
+        unquote(assigns_vars_ast)
+        unquote(template_ast)
       end
 
-      @spec render(unquote(assigns_typespec), [{:do, binary()}]) :: binary()
+      @spec render(unquote(assigns_typespec), [{:do, String.t()}]) :: String.t()
       def render(var!(assigns), [{:do, var!(yield)}]) do
         _ = var!(yield)
         _ = var!(assigns)
-        unquote(assigns_ast)
-        unquote(template)
+        unquote(assigns_vars_ast)
+        unquote(template_ast)
       end
     end
   end
 
-  defp fetch_template(args) do
-    case Keyword.get(args, :template, "") do
+  @spec fetch_template(options()) :: {Macro.t(), String.t()}
+  defp fetch_template(options) do
+    case Keyword.get(options, :template, "") do
       ast = {:sigil_X, _, [{:<<>>, _, [template]} | _]} ->
         {ast, template}
 
@@ -51,21 +60,27 @@ defmodule X.Component do
     end
   end
 
-  defp fetch_assigns(args, env) do
-    assigns = Keyword.get(args, :assigns, Macro.escape(%{}))
+  @spec fetch_assigns(options(), Macro.Env.t()) :: Macro.t()
+  defp fetch_assigns(options, env) do
+    assigns = Keyword.get(options, :assigns, [])
 
-    Macro.postwalk(assigns, fn
-      ast = {:__aliases__, _, _} ->
-        Macro.expand_once(ast, env)
+    if is_list(assigns) do
+      {:%{}, [], Enum.map(assigns, &{&1, quote(do: any())})}
+    else
+      Macro.postwalk(assigns, fn
+        ast = {:__aliases__, _, _} ->
+          Macro.expand_once(ast, env)
 
-      {:required, [_], [atom]} ->
-        atom
+        {:required, [_], [atom]} ->
+          atom
 
-      ast ->
-        ast
-    end)
+        ast ->
+          ast
+      end)
+    end
   end
 
+  @spec build_component_doc(String.t(), Macro.t()) :: String.t()
   defp build_component_doc(template, assigns) do
     Enum.join(
       [
@@ -78,26 +93,13 @@ defmodule X.Component do
     )
   end
 
-  def merge_docs(module_doc, component_doc) do
-    case module_doc do
-      nil -> component_doc
-      _ -> Enum.join([module_doc, component_doc], "\n")
-    end
+  @spec build_assigns_typespec(Macro.t()) :: Macro.t()
+  defp build_assigns_typespec({:%{}, context, assigns}) do
+    {:%{}, context, assigns ++ [quote(do: {atom(), any()})]}
   end
 
-  defp build_assigns_typespec(assigns) do
-    any_key_ast = [quote(do: {atom(), any()})]
-
-    case assigns do
-      {:%{}, [_], assigns} ->
-        {:%{}, [], assigns ++ any_key_ast}
-
-      _ ->
-        {:%{}, [], Enum.map(assigns, &{&1, quote(do: any())}) ++ any_key_ast}
-    end
-  end
-
-  defp build_assigns_ast({:%{}, [_], assigns}) do
+  @spec build_assigns_vars_ast(Macro.t() | [atom()]) :: Macro.t()
+  defp build_assigns_vars_ast({:%{}, [_], assigns}) do
     Enum.map(assigns, fn
       {{:optional, _, [attr]}, _} ->
         quote do
@@ -108,14 +110,6 @@ defmodule X.Component do
         quote do
           unquote(Macro.var(attr, nil)) = var!(assigns).unquote(attr)
         end
-    end)
-  end
-
-  defp build_assigns_ast(assigns) when is_list(assigns) do
-    Enum.map(assigns, fn attr ->
-      quote do
-        unquote(Macro.var(attr, nil)) = var!(assigns).unquote(attr)
-      end
     end)
   end
 end
