@@ -11,7 +11,7 @@ defmodule X do
   end
 
   def format_file!(file) when is_binary(file) do
-    Regex.replace(@format_sigil_regexp, file, fn _, head, template ->
+    Regex.replace(@format_sigil_regexp, file, fn (_, head, template) ->
       identation = List.first(Regex.split(~r/[^\n\s]/, head))
 
       spaces_count =

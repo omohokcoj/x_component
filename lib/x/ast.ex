@@ -15,7 +15,7 @@ defmodule X.Ast do
         }
 
   @type tag_condition() :: {
-          condition :: :if | :else | :elseif,
+          condition :: :if | :else | :elseif | :unless,
           cursor :: cursor(),
           value :: Chars.t()
         }
@@ -71,10 +71,16 @@ defmodule X.Ast do
           tag_name :: Chars.t()
         }
 
-  @type leaf :: {
+  @type token() ::
+          tag_start()
+          | tag_end()
+          | tag_text()
+          | tag_output()
+          | text_group()
+          | tag_comment()
+
+  @type leaf() :: {
           token :: token(),
           children :: [leaf()]
         }
-
-  @type token() :: tag_start() | tag_end() | tag_text() | tag_output() | text_group() | tag_comment()
 end

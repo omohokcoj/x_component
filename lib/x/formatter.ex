@@ -1,9 +1,12 @@
 defmodule X.Formatter do
+  alias X.Ast
   alias Inspect.Algebra, as: A
 
-  @script_tags ['script', 'style']
-  @directives [:if, :elseif, :for, :unless]
+  @type options() :: [{:nest, integer()}]
 
+  @script_tags ['script', 'style']
+
+  @spec call([Ast.leaf()], options()) :: String.t()
   def call(tree, options \\ []) do
     tree
     |> list_to_doc()
@@ -12,6 +15,12 @@ defmodule X.Formatter do
     |> IO.iodata_to_binary()
   end
 
+  @spec list_to_doc([Ast.leaf()]) :: A.t()
+  defp list_to_doc(list) when is_list(list) do
+    list_to_doc(list, A.empty())
+  end
+
+  @spec list_to_doc([Ast.leaf()], A.t() | String.t()) :: A.t()
   defp list_to_doc(list, delimiter) do
     list
     |> Enum.map(&format(&1))
@@ -19,10 +28,7 @@ defmodule X.Formatter do
     |> A.concat()
   end
 
-  defp list_to_doc(list) when is_list(list) do
-    list_to_doc(list, A.empty())
-  end
-
+  @spec format(Ast.leaf()) :: A.t()
   defp format({token = {:tag_start, _, _, _, _, _, is_singletone, _, _}, children}) do
     {tag_head_doc, is_multiple_attrs} = format_tag_head(token)
     tag_body_doc = format_tag_body(token, children, is_multiple_attrs)
@@ -72,15 +78,15 @@ defmodule X.Formatter do
   end
 
   defp format({{:tag_text, _, text, _, _}, _}) do
-    to_string(text)
+    IO.iodata_to_binary(text)
   end
 
   defp format({{:tag_comment, _, text}, _}) do
     A.concat(A.line(), "<!#{text}>")
   end
 
-  defp format({expr, _, value}) when expr in @directives do
-    ~s(x-#{expr}="#{format_code(value)}")
+  defp format({expr, _, value}) when expr in [:if, :elseif, :for, :unless] do
+    IO.iodata_to_binary(["x-", Atom.to_string(expr), '="', format_code(value), '"'])
   end
 
   defp format({:else, _, _}) do
@@ -88,7 +94,12 @@ defmodule X.Formatter do
   end
 
   defp format({{:tag_output, _, data, is_html_escape}, _}) do
-    "{{#{unless(is_html_escape, do: "=")} #{format_code(data)} }}"
+    IO.iodata_to_binary([
+      "{{",
+      if(is_html_escape, do: " ", else: "= "),
+      format_code(data),
+      " }}"
+    ])
   end
 
   defp format({:tag_attr, _, name, value, is_dynamic}) do
@@ -96,15 +107,22 @@ defmodule X.Formatter do
       case value do
         '%{' ++ _ -> ""
         [char | _] when char in '{[' -> ""
-        _ -> if(Enum.any?(value, &(&1 == ?")), do: "'", else: <<?">>)
+        _ -> if(Enum.any?(value, &(&1 == ?")), do: "'", else: '"')
       end
 
     value = if(is_dynamic, do: format_code(value), else: value)
 
-    if(is_dynamic, do: ":", else: "") <>
-      to_string(name) <> "=" <> delimiter <> to_string(value) <> delimiter
+    IO.iodata_to_binary([
+      if(is_dynamic, do: ":", else: ""),
+      name,
+      "=",
+      delimiter,
+      value,
+      delimiter
+    ])
   end
 
+  @spec format_tag_head(Ast.tag_start()) :: {A.t(), boolean()}
   defp format_tag_head({:tag_start, _, name, attrs, condition, iterator, _, _, _}) do
     tag_attrs = sort_tag_attrs(condition, iterator, attrs)
     attrs_length = length(tag_attrs)
@@ -132,6 +150,7 @@ defmodule X.Formatter do
     {doc, is_multiple_attrs}
   end
 
+  @spec format_tag_body(Ast.tag_start(), [Ast.leaf()], boolean()) :: A.t()
   defp format_tag_body({:tag_start, _, name, _, _, _, _, _, _}, children, is_multiple_attrs) do
     is_selfclosed = length(children) == 0
 
@@ -146,7 +165,7 @@ defmodule X.Formatter do
 
     tag_close =
       A.concat(
-        if(singleline?(children),
+        if(singleline_children?(children),
           do: A.empty(),
           else: A.line()
         ),
@@ -168,10 +187,16 @@ defmodule X.Formatter do
     ])
   end
 
+  @spec format_code(charlist()) :: iodata()
   defp format_code(string) do
-    Code.format_string!(to_string(string))
+    string
+    |> IO.iodata_to_binary()
+    |> Code.format_string!()
   end
 
+  @spec sort_tag_attrs(Ast.tag_condition(), Ast.tag_iterator(), [Ast.tag_attr()]) :: [
+          Ast.tag_attr() | Ast.tag_condition() | Ast.tag_iterator()
+        ]
   defp sort_tag_attrs(condition, iterator, attrs) do
     attrs = Enum.sort_by(attrs, fn {:tag_attr, _, name, _, _} -> name end)
 
@@ -185,26 +210,25 @@ defmodule X.Formatter do
         is_dynamic
       end)
 
-    id_attrs
-    |> Kernel.++([condition, iterator])
+    [condition, iterator]
     |> Enum.filter(& &1)
+    |> Kernel.++(id_attrs)
     |> Kernel.++(dynamic_attrs)
     |> Kernel.++(regular_attrs)
   end
 
-  defp singleline?(children) do
-    case children do
-      [{{:text_group, _, _}, nested}] ->
-        Enum.all?(nested, fn
-          {{:tag_text, _, [first | _], _, true}, []} ->
-            first != ?\n
-
-          _ ->
-            true
-        end)
+  @spec singleline_children?([Ast.leaf()]) :: boolean()
+  defp singleline_children?([{{:text_group, _, _}, nested}]) do
+    Enum.all?(nested, fn
+      {{:tag_text, _, [first | _], _, true}, []} ->
+        first != ?\n
 
       _ ->
-        false
-    end
+        true
+    end)
+  end
+
+  defp singleline_children?(_) do
+    false
   end
 end

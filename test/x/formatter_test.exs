@@ -36,9 +36,9 @@ defmodule X.FormatterTest do
     assert doc == ~s(
 <!DOCTYPE html>
 <div
-  id="asd"
   x-if="true"
   x-for="a <- [123, 123]"
+  id="asd"
   :asd="asd"
   asd="asd"
 >
