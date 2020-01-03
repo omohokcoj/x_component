@@ -4,6 +4,8 @@ defmodule X.Component do
           | {:template, Macro.t()}
         ]
 
+  @reserved_dynamic_attrs [:class, :style]
+
   defmacro __using__(options) when is_list(options) do
     {template_ast, template} = fetch_template(options)
     assigns_ast = fetch_assigns(options, __CALLER__)
@@ -27,16 +29,12 @@ defmodule X.Component do
 
   defmacro define_render_functions(template_ast, assigns_ast) do
     assigns_typespec = build_assigns_typespec(assigns_ast)
-    assigns_vars_ast = build_assigns_vars_ast(assigns_ast)
+    assigns_vars_ast = build_assigns_vars_ast(assigns_ast, __CALLER__)
 
     quote do
       @spec render(unquote(assigns_typespec)) :: String.t()
-      def render(var!(assigns)) do
-        var!(yield) = nil
-        _ = var!(yield)
-        _ = var!(assigns)
-        unquote(assigns_vars_ast)
-        unquote(template_ast)
+      def render(assigns) do
+        render(assigns, do: nil)
       end
 
       @spec render(unquote(assigns_typespec), [{:do, String.t()}]) :: String.t()
@@ -98,18 +96,31 @@ defmodule X.Component do
     {:%{}, context, assigns ++ [quote(do: {atom(), any()})]}
   end
 
-  @spec build_assigns_vars_ast(Macro.t() | [atom()]) :: Macro.t()
-  defp build_assigns_vars_ast({:%{}, [_], assigns}) do
+  @spec build_assigns_vars_ast(Macro.t() | [atom()], any()) :: Macro.t()
+  defp build_assigns_vars_ast({:%{}, [_], assigns}, env) do
     Enum.map(assigns, fn
-      {{:optional, _, [attr]}, _} ->
+      {{:optional, [line: line], [attr]}, _} ->
+        maybe_warn_reserved_attribute(attr, %{env | line: line})
+
         quote do
           unquote(Macro.var(attr, nil)) = Map.get(var!(assigns), unquote(attr))
         end
 
       {attr, _} ->
+        maybe_warn_reserved_attribute(attr, env)
+
         quote do
           unquote(Macro.var(attr, nil)) = var!(assigns).unquote(attr)
         end
     end)
+  end
+
+  defp maybe_warn_reserved_attribute(attr, env) do
+    if attr in @reserved_dynamic_attrs do
+      IO.warn(
+        ~s(property "#{to_string(attr)}" is reserved for dynamic tag attributes),
+        Macro.Env.stacktrace(env)
+      )
+    end
   end
 end
