@@ -9,19 +9,19 @@ defmodule X.Formatter do
   @spec call([Ast.leaf()], options()) :: String.t()
   def call(tree, options \\ []) do
     tree
-    |> list_to_doc()
+    |> ast_to_doc()
     |> A.nest(Keyword.get(options, :nest, 0))
     |> A.format(:infinity)
     |> IO.iodata_to_binary()
   end
 
-  @spec list_to_doc([Ast.leaf()]) :: A.t()
-  defp list_to_doc(list) when is_list(list) do
-    list_to_doc(list, A.empty())
+  @spec ast_to_doc([Ast.leaf()]) :: A.t()
+  defp ast_to_doc(list) when is_list(list) do
+    ast_to_doc(list, A.empty())
   end
 
-  @spec list_to_doc([Ast.leaf()], A.t() | String.t()) :: A.t()
-  defp list_to_doc(list, delimiter) do
+  @spec ast_to_doc([Ast.leaf()], A.t() | String.t()) :: A.t()
+  defp ast_to_doc(list, delimiter) do
     list
     |> Enum.map(&format(&1))
     |> Enum.intersperse(delimiter)
@@ -46,25 +46,18 @@ defmodule X.Formatter do
   end
 
   defp format({{:text_group, _, tag_name}, children}) do
-    is_script = tag_name in @script_tags
-
     children
     |> Enum.reduce([], fn node, acc ->
       case node do
         {{:tag_text, _, [first | _], _, true}, []} ->
-          case {acc, first} do
-            {[:doc_line], ?\n} -> [A.line()]
-            {[], ?\n} -> [A.line()]
-            {[], _} -> [" "]
-            {_, ?\s} -> [format(node) | acc]
-            _ -> [A.line() | acc]
-          end
+          if first == ?\n,
+            do: [A.line() | acc],
+            else: [" " | acc]
 
         {{:tag_text, _, [?\n | _], _, _}, []} ->
-          delimiter = if(is_script || acc == [:doc_line], do: A.empty(), else: A.line())
-          result = if(is_script, do: format(node), else: String.trim_leading(format(node)))
-
-          [result, delimiter | acc]
+          if tag_name in @script_tags,
+            do: [format(node), A.empty() | acc],
+            else: [String.trim_leading(format(node)), A.line() | acc]
 
         _ ->
           [format(node) | acc]
@@ -78,11 +71,11 @@ defmodule X.Formatter do
   end
 
   defp format({{:tag_text, _, text, _, _}, _}) do
-    IO.iodata_to_binary(text)
+    :unicode.characters_to_binary(text)
   end
 
   defp format({{:tag_comment, _, text}, _}) do
-    A.concat(A.line(), "<!#{text}>")
+    A.concat([A.line(), "<!", :unicode.characters_to_binary(text), ">"])
   end
 
   defp format({expr, _, value}) when expr in [:if, :elseif, :for, :unless] do
@@ -128,7 +121,7 @@ defmodule X.Formatter do
     attrs_length = length(tag_attrs)
     is_multiple_attrs = attrs_length > 1
 
-    attrs_doc = list_to_doc(tag_attrs, if(is_multiple_attrs, do: A.line()))
+    attrs_doc = ast_to_doc(tag_attrs, if(is_multiple_attrs, do: A.line()))
 
     tag_name_end =
       case attrs_length do
@@ -140,7 +133,8 @@ defmodule X.Formatter do
     doc =
       A.nest(
         A.concat([
-          "<#{name}",
+          "<",
+          :unicode.characters_to_binary(name),
           tag_name_end,
           attrs_doc
         ]),
@@ -164,19 +158,21 @@ defmodule X.Formatter do
     tag_selfclose = if(is_multiple_attrs, do: "/>", else: A.empty())
 
     tag_close =
-      A.concat(
+      A.concat([
         if(singleline_children?(children),
           do: A.empty(),
           else: A.line()
         ),
-        "</#{name}>"
-      )
+        "</",
+        :unicode.characters_to_binary(name),
+        ">"
+      ])
 
     A.concat([
       A.nest(
         A.concat([
           tag_head_end,
-          list_to_doc(children)
+          ast_to_doc(children)
         ]),
         2
       ),
@@ -200,15 +196,10 @@ defmodule X.Formatter do
   defp sort_tag_attrs(condition, iterator, attrs) do
     attrs = Enum.sort_by(attrs, fn {:tag_attr, _, name, _, _} -> name end)
 
-    {id_attrs, attrs} =
-      Enum.split_with(attrs, fn {_, _, name, _, _} ->
-        name == 'id'
-      end)
+    {id_attrs, attrs} = Enum.split_with(attrs, fn {_, _, name, _, _} -> name == 'id' end)
 
     {dynamic_attrs, regular_attrs} =
-      Enum.split_with(attrs, fn {_, _, _, _, is_dynamic} ->
-        is_dynamic
-      end)
+      Enum.split_with(attrs, fn {_, _, _, _, is_dynamic} -> is_dynamic end)
 
     [condition, iterator]
     |> Enum.filter(& &1)

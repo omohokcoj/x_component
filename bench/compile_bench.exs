@@ -58,7 +58,7 @@ Benchee.run(%{
     "X" => fn ->
       tokens = X.Tokenizer.call(html_template)
       tree = X.Parser.call(tokens)
-      template_ast = X.Compiler.call(tree, __ENV__)
+      template_ast = X.Compiler.call(tree)
     end,
     "EEx" => fn ->
       EEx.compile_string(html_template)

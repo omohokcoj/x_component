@@ -31,6 +31,8 @@ defmodule X.MixProject do
       {:slime, "~> 1.2", only: :dev},
       {:expug, "~> 0.9", only: :dev},
       {:phoenix, ">= 0.0.0", only: :dev},
+      {:jason, ">= 0.0.0", only: :dev},
+      {:poison, ">= 0.0.0", only: :dev},
       {:plug, ">= 0.0.0"},
       {:temple, "~> 0.4.0", only: :dev}
     ]

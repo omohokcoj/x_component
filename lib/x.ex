@@ -1,6 +1,12 @@
 defmodule X do
   @format_sigil_regexp ~r/(\n[^\n]*?~X\""")\n+(.*?)\"""/s
 
+  if Code.ensure_compiled?(Phoenix) do
+    def json_library, do: Phoenix.json_library()
+  else
+    def json_library, do: Application.get_env(:x_component, :json_library)
+  end
+
   def compile_string!(source, env \\ []) when is_binary(source) and is_list(env) do
     source
     |> X.Tokenizer.call()
@@ -11,7 +17,7 @@ defmodule X do
   end
 
   def format_file!(file) when is_binary(file) do
-    Regex.replace(@format_sigil_regexp, file, fn (_, head, template) ->
+    Regex.replace(@format_sigil_regexp, file, fn _, head, template ->
       identation = List.first(Regex.split(~r/[^\n\s]/, head))
 
       spaces_count =

@@ -7,8 +7,14 @@ defmodule X.Compiler do
   @component_key_name 'component'
   @is_key_name 'is'
   @attrs_key_name 'attrs'
+  @special_attr_assigns ['style', 'class']
 
   @type env() :: X.Template.env()
+
+  @spec call([Ast.leaf()]) :: Macro.t()
+  def call(tree) do
+    call(tree, [], [])
+  end
 
   @spec call([Ast.leaf()], env()) :: Macro.t()
   def call(tree, env) do
@@ -16,27 +22,12 @@ defmodule X.Compiler do
   end
 
   @spec call([Ast.leaf()], env(), [Macro.t()]) :: Macro.t()
-  def call([head = {tag, _} | tail], env, acc) do
-    result = compile(head, env)
-
-    result =
-      case tag do
-        {:tag_start, _, _, _, _, iterator = {:for, _, _}, _, _, _} ->
-          compile_for_expr(iterator, result, env)
-
-        _ ->
-          result
-      end
-
+  def call(tree = [head | _], env, acc) do
     {result, tail} =
-      case tag do
-        {:tag_start, _, _, _, token = {condition, _, _}, _, _, _, _}
-        when condition in [:if, :unless] ->
-          compile_cond_expr(token, result, tail, env)
-
-        _ ->
-          {result, tail}
-      end
+      head
+      |> compile(env)
+      |> maybe_wrap_in_iterator(head, env)
+      |> maybe_wrap_in_condition(tree, env)
 
     call(tail, env, [result | acc])
   end
@@ -56,7 +47,7 @@ defmodule X.Compiler do
 
   defp compile({{:tag_output, cur, body, true}, _}, env) do
     quote do
-      X.Html.escape(Kernel.to_string(unquote(compile_expr(body, cur, env))))
+      Html.to_safe_string(unquote(compile_expr(body, cur, env)))
     end
   end
 
@@ -66,11 +57,8 @@ defmodule X.Compiler do
     end
   end
 
-  defp compile({{:tag_text, _, body, _, is_blank}, _}, _env) do
-    case is_blank do
-      false -> :unicode.characters_to_binary(body)
-      _ -> " "
-    end
+  defp compile({{:tag_text, _, body, _, false}, _}, _env) do
+    :unicode.characters_to_binary(body)
   end
 
   defp compile({{:tag_start, _, tag_name, attrs, _, _, false, _, false}, children}, env) do
@@ -135,29 +123,114 @@ defmodule X.Compiler do
   end
 
   defp compile({{:tag_comment, _, body}, _}, _env) do
-    "<!#{body}>"
+    <<"<!", :unicode.characters_to_binary(body)::binary, ?>>>
+  end
+
+  @spec maybe_wrap_in_iterator(Macro.t(), Ast.leaf(), env()) :: Macro.t()
+  defp maybe_wrap_in_iterator(ast, node, env) do
+    case node do
+      {{:tag_start, _, _, _, _, iterator = {:for, _, _}, _, _, _}, _} ->
+        compile_for_expr(iterator, ast, env)
+
+      _ ->
+        ast
+    end
+  end
+
+  @spec maybe_wrap_in_condition(Macro.t(), [Ast.leaf()], env()) :: Macro.t()
+  defp maybe_wrap_in_condition(ast, [head | tail], env) do
+    case head do
+      {{:tag_start, _, _, _, token = {condition, _, _}, _, _, _, _}, _}
+      when condition in [:if, :unless] ->
+        compile_cond_expr(token, ast, tail, env)
+
+      _ ->
+        {ast, tail}
+    end
   end
 
   @spec compile_attrs([Ast.tag_attr()], env()) :: [Macro.t()]
   defp compile_attrs(attrs, env) do
-    Enum.map(attrs, &compile_attr(&1, env))
-  end
+    {attrs_ast, base_attrs, merge_attrs, static_attr_tokens} =
+      attrs
+      |> Enum.reduce({nil, [], [], []}, fn attr_token,
+                                           {attr_ast, base_attrs, merge_attrs, static_attr_tokens} ->
+        case attr_token do
+          {_, cur, @attrs_key_name, value, true} ->
+            {compile_expr(value, cur, env), base_attrs, merge_attrs, static_attr_tokens}
 
-  defp compile_attr({:tag_attr, cur, @attrs_key_name, value, true}, env) do
-    attrs_ast = quote(do: Html.attrs_to_string(unquote(compile_expr(value, cur, env))))
+          {_, _, name, _, is_dynamic} ->
+            case List.keytake(static_attr_tokens, name, 2) do
+              {m_attr_token = {:tag_attr, _, _, _, true}, rest_attrs} when is_dynamic == false ->
+                {
+                  attr_ast,
+                  [attr_token_to_tuple(m_attr_token, env) | base_attrs],
+                  [attr_token_to_tuple(attr_token, env) | merge_attrs],
+                  rest_attrs
+                }
 
-    quote do
-      <<?\s, unquote(attrs_ast)::binary>>
+              {m_attr_token = {:tag_attr, _, _, _, false}, rest_attrs} when is_dynamic == true ->
+                {
+                  attr_ast,
+                  [attr_token_to_tuple(attr_token, env) | base_attrs],
+                  [attr_token_to_tuple(m_attr_token, env) | merge_attrs],
+                  rest_attrs
+                }
+
+              nil ->
+                {attr_ast, base_attrs, merge_attrs, [attr_token | static_attr_tokens]}
+            end
+        end
+      end)
+
+    case {attrs_ast, merge_attrs} do
+      {nil, []} ->
+        Enum.map(static_attr_tokens, &compile_attr(&1, env))
+
+      {nil, _} ->
+        [
+          quote do
+            <<?\s,
+              Html.attrs_to_string(Html.merge_attrs(unquote(base_attrs), unquote(merge_attrs)))::binary>>
+          end
+          | Enum.map(static_attr_tokens, &compile_attr(&1, env))
+        ]
+
+      _ ->
+        quote do
+          [
+            case {unquote(attrs_ast), unquote(base_attrs)} do
+              {attrs, base_attrs} when attrs not in [nil, []] or base_attrs != [] ->
+                <<?\s,
+                  Html.attrs_to_string(
+                    Html.merge_attrs(
+                      Html.merge_attrs(base_attrs, unquote(merge_attrs)) ++
+                        unquote(Enum.map(static_attr_tokens, &attr_token_to_tuple(&1, env))),
+                      attrs
+                    )
+                  )::binary>>
+
+              _ ->
+                <<unquote_splicing(Enum.map(static_attr_tokens, &compile_attr(&1, env)))>>
+            end :: binary
+          ]
+        end
     end
   end
 
   @spec compile_attrs(Ast.tag_attr(), env()) :: Macro.t()
   defp compile_attr({:tag_attr, cur, name, value, true}, env) do
+    name_string = :erlang.iolist_to_binary(name)
+
     value_ast =
-      quote(do: Html.escape(Html.attr_to_string(unquote(compile_expr(value, cur, env)))))
+      quote do
+        Html.escape(
+          Html.attr_value_to_string(unquote(compile_expr(value, cur, env)), unquote(name_string))
+        )
+      end
 
     quote do
-      <<?\s, unquote(:erlang.iolist_to_binary(name)), ?=, ?", unquote(value_ast)::binary, ?">>
+      <<?\s, unquote(name_string), ?=, ?", unquote(value_ast)::binary, ?">>
     end
   end
 
@@ -178,29 +251,54 @@ defmodule X.Compiler do
 
   @spec compile_assigns([Ast.tag_attr()], env()) :: Macro.t()
   defp compile_assigns(attrs, env) do
-    {assigns, attrs, assigns_list, attrs_list} =
-      Enum.reduce(attrs, {nil, nil, [], []}, fn {_, cur, name, value, is_dynamic},
-                                                {assigns, attrs, assigns_acc, attrs_acc} ->
-        if is_dynamic do
+    {assigns, attrs, assigns_list, attrs_list, merge_attrs} =
+      Enum.reduce(attrs, {nil, nil, [], [], []}, fn token = {_, cur, name, value, is_dynamic},
+                                                    {assigns, attrs, assigns_acc, attrs_acc,
+                                                     merge_acc} ->
+        if is_dynamic && name not in @special_attr_assigns do
           value = compile_expr(value, cur, env)
 
           case name do
-            @assigns_key_name -> {value, attrs, assigns_acc, attrs_acc}
-            @attrs_key_name -> {assigns, value, assigns_acc, attrs_acc}
-            _ -> {assigns, attrs, [{key_to_atom(name), value} | assigns_acc], attrs_acc}
+            @assigns_key_name ->
+              {value, attrs, assigns_acc, attrs_acc, merge_acc}
+
+            @attrs_key_name ->
+              {assigns, value, assigns_acc, attrs_acc, merge_acc}
+
+            _ ->
+              {assigns, attrs, [{attr_key_to_atom(name), value} | assigns_acc], attrs_acc,
+               merge_acc}
           end
         else
-          {assigns, attrs, assigns_acc,
-           [{:erlang.iolist_to_binary(name), :unicode.characters_to_binary(value)} | attrs_acc]}
+          case List.keytake(attrs_acc, to_string(name), 0) do
+            {attr = {_, value}, rest_attrs} when is_binary(value) ->
+              {assigns, attrs, assigns_acc, [attr | rest_attrs],
+               [attr_token_to_tuple(token, env) | merge_acc]}
+
+            {attr, rest_attrs} ->
+              {assigns, attrs, assigns_acc, [attr_token_to_tuple(token, env) | rest_attrs],
+               [attr | merge_acc]}
+
+            nil ->
+              {assigns, attrs, assigns_acc, [attr_token_to_tuple(token, env) | attrs_acc],
+               merge_acc}
+          end
         end
       end)
 
+    merged_attrs =
+      case {attrs_list, merge_attrs} do
+        {[], _} -> []
+        {_, []} -> attrs_list
+        {_, _} -> quote(do: Html.merge_attrs(unquote(attrs_list), unquote(merge_attrs)))
+      end
+
     attrs_ast =
-      case {attrs, attrs_list} do
+      case {attrs, merged_attrs} do
         {nil, []} -> nil
-        {nil, _} -> attrs_list
+        {nil, _} -> merged_attrs
         {_, []} -> attrs
-        {_, _} -> quote(do: unquote(attrs) ++ unquote(attrs_list))
+        {_, _} -> quote(do: Html.merge_attrs(unquote(merged_attrs), unquote(attrs)))
       end
 
     case {assigns, assigns_list, attrs_ast} do
@@ -218,20 +316,7 @@ defmodule X.Compiler do
   end
 
   defp compile_cond_expr(condition = {:if, cur, expr}, ast, tail, env) do
-    {else_ast, tail} =
-      case tail do
-        [next = {{:tag_start, _, _, _, {:else, _cur, _}, _, _, _, _}, _} | rest] ->
-          {compile(next, env), rest}
-
-        [next = {{:tag_start, _, _, _, {:elseif, cur, expr}, _, _, _, _}, _} | rest] ->
-          compile_cond_expr({:if, cur, expr}, compile(next, env), rest, env)
-
-        [{{:text_group, _, _}, [{{:tag_text, _, _, _, true}, _}]} | rest] ->
-          compile_cond_expr(condition, ast, rest, env)
-
-        _ ->
-          {"", tail}
-      end
+    {else_ast, tail} = find_cond_else_expr(condition, ast, tail, env)
 
     ast =
       quote do
@@ -239,6 +324,24 @@ defmodule X.Compiler do
       end
 
     {ast, tail}
+  end
+
+  @spec find_cond_else_expr(Ast.tag_condition(), Macro.t(), [Ast.leaf()], env()) ::
+          {Macro.t(), [Ast.leaf()]}
+  def find_cond_else_expr(condition, ast, tail, env) do
+    case tail do
+      [next = {{:tag_start, _, _, _, {:else, _cur, _}, _, _, _, _}, _} | rest] ->
+        {compile(next, env), rest}
+
+      [next = {{:tag_start, _, _, _, {:elseif, cur, expr}, _, _, _, _}, _} | rest] ->
+        compile_cond_expr({:if, cur, expr}, compile(next, env), rest, env)
+
+      [{{:text_group, _, _}, [{{:tag_text, _, _, _, true}, _}]} | rest] ->
+        find_cond_else_expr(condition, ast, rest, env)
+
+      _ ->
+        {"", tail}
+    end
   end
 
   @spec compile_for_expr(Ast.tag_iterator(), Macro.t(), env()) :: Macro.t()
@@ -256,7 +359,7 @@ defmodule X.Compiler do
 
   @spec compile_expr(charlist(), Ast.cursor(), env()) :: Macro.t()
   defp compile_expr(charlist, {_, row}, env) do
-    quoted = Code.string_to_quoted!(charlist, line: row + env[:line])
+    quoted = Code.string_to_quoted!(charlist, line: row + Keyword.get(env, :line, 0))
 
     Macro.postwalk(quoted, fn
       {:@, meta, [{name, _, atom}]} when is_atom(name) and is_atom(atom) ->
@@ -299,12 +402,13 @@ defmodule X.Compiler do
       {{:tag_text, _, _, _, true}, _}, acc ->
         [" " | acc]
 
-      head = {{:tag_text, _, _, true, _}, _}, acc ->
+      head = {{:tag_text, _, [char | _], true, _}, _}, acc ->
         result = String.trim_leading(compile(head, env))
 
-        case acc do
-          [" " | _] -> [result | acc]
-          _ -> [result, " " | acc]
+        cond do
+          char == ?\n -> [result, "\n" | acc]
+          List.first(acc) == " " -> [result | acc]
+          true -> [result, " " | acc]
         end
 
       head, acc ->
@@ -320,8 +424,19 @@ defmodule X.Compiler do
     end)
   end
 
-  @spec key_to_atom(charlist()) :: atom()
-  defp key_to_atom(name) do
+  @spec attr_token_to_tuple(Ast.tag_attr(), env()) :: {String.t(), Macro.t()}
+  defp attr_token_to_tuple(token, env) do
+    case token do
+      {:tag_attr, _cur, name, value, false} ->
+        {:erlang.iolist_to_binary(name), :unicode.characters_to_binary(value)}
+
+      {:tag_attr, cur, name, value, true} ->
+        {:erlang.iolist_to_binary(name), compile_expr(value, cur, env)}
+    end
+  end
+
+  @spec attr_key_to_atom(charlist()) :: atom()
+  defp attr_key_to_atom(name) do
     String.to_atom(
       for(
         char <- name,
