@@ -4,7 +4,12 @@ defmodule X.Component do
           | {:template, Macro.t()}
         ]
 
-  @reserved_dynamic_attrs [:class, :style]
+  @reserved_dynamic_attrs [
+    :class,
+    :style,
+    :assigns,
+    :attrs
+  ]
 
   defmacro __using__(options) when is_list(options) do
     {template_ast, template} = fetch_template(options)
@@ -32,12 +37,18 @@ defmodule X.Component do
     assigns_vars_ast = build_assigns_vars_ast(assigns_ast, __CALLER__)
 
     quote do
-      @spec render(unquote(assigns_typespec)) :: String.t()
+      @spec render_to_string(unquote(assigns_typespec)) :: String.t()
+      @spec render_to_string(unquote(assigns_typespec), [{:do, iodata() | nil}]) :: String.t()
+      def render_to_string(assigns, options \\ [do: nil]) do
+        IO.iodata_to_binary(render(assigns, options))
+      end
+
+      @spec render(unquote(assigns_typespec)) :: iodata()
       def render(assigns) do
         render(assigns, do: nil)
       end
 
-      @spec render(unquote(assigns_typespec), [{:do, String.t()}]) :: String.t()
+      @spec render(unquote(assigns_typespec), [{:do, iodata() | nil}]) :: iodata()
       def render(var!(assigns), [{:do, var!(yield)}]) do
         _ = var!(yield)
         _ = var!(assigns)
@@ -93,7 +104,12 @@ defmodule X.Component do
 
   @spec build_assigns_typespec(Macro.t()) :: Macro.t()
   defp build_assigns_typespec({:%{}, context, assigns}) do
-    {:%{}, context, assigns ++ [quote(do: {atom(), any()})]}
+    optional_keys = [
+      quote(do: {optional(:attrs), [{binary(), any()}]}),
+      quote(do: {atom(), any()})
+    ]
+
+    {:%{}, context, assigns ++ optional_keys}
   end
 
   @spec build_assigns_vars_ast(Macro.t() | [atom()], any()) :: Macro.t()

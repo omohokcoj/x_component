@@ -20,114 +20,114 @@ defmodule X.Tokenizer do
 
   @spec call(charlist() | String.t()) :: [Ast.token()]
   def call(html) when is_list(html) do
-    tokenize(html, {1, 1}, [])
+    tokenize(html, {1, 1})
   end
 
   def call(html) when is_binary(html) do
     html
-    |> Kernel.to_charlist()
+    |> :unicode.characters_to_list()
     |> call()
   end
 
-  @spec tokenize(charlist(), Ast.cursor(), [Ast.token()]) :: [Ast.token()]
-  defp tokenize([], _col, acc) do
-    Enum.reverse(acc)
+  @spec tokenize(charlist(), Ast.cursor()) :: [Ast.token()]
+  defp tokenize('</' ++ tail, {col, row}) do
+    {name, list, cur} = extract_tag_end(tail, {col + 2, row})
+
+    token = {:tag_end, {col, row}, name}
+
+    [token | tokenize(list, cur)]
   end
 
-  defp tokenize('</' ++ tail, {col, row}, acc) do
-    {token, list, cur} = extract_tag_end(tail, {col, row})
-
-    tokenize(list, cur, [token | acc])
-  end
-
-  defp tokenize('{{=' ++ tail, {col, row}, acc) do
+  defp tokenize('{{=' ++ tail, {col, row}) do
     {list, cur} = skip_whitespace(tail, {col + 3, row})
     {data, list, cur} = extract_tag_output(list, cur)
 
     token = {:tag_output, {col, row}, data, false}
 
-    tokenize(list, cur, [token | acc])
+    [token | tokenize(list, cur)]
   end
 
-  defp tokenize('{{' ++ tail, {col, row}, acc) do
+  defp tokenize('{{' ++ tail, {col, row}) do
     {list, cur} = skip_whitespace(tail, {col + 2, row})
     {data, list, cur} = extract_tag_output(list, cur)
 
     token = {:tag_output, {col, row}, data, true}
 
-    tokenize(list, cur, [token | acc])
+    [token | tokenize(list, cur)]
   end
 
-  defp tokenize('<!' ++ tail, {col, row}, acc) do
+  defp tokenize('<!' ++ tail, {col, row}) do
     {data, list, cur} = extract_value(tail, {col + 2, row}, '>', false)
 
     token = {:tag_comment, {col, row}, data}
 
-    tokenize(list, cur, [token | acc])
+    [token | tokenize(list, cur)]
   end
 
-  defp tokenize([?<, next | tail], {col, row}, acc) do
+  defp tokenize([?<, next | tail], {col, row}) do
     cond do
       is_letter(next) ->
         {token, list, cur} = extract_tag_start([next | tail], {col, row})
 
-        tokenize(list, cur, [token | acc])
+        [token | tokenize(list, cur)]
 
       true ->
         throw({:unexpected_token, {col, row}, next})
     end
   end
 
-  defp tokenize([char | tail], cur = {col, row}, acc) do
+  defp tokenize([char | tail], cur = {col, row}) do
     {text, is_blank, list, cur} = extract_tag_text(tail, next_cursor(char, cur))
 
     token = {:tag_text, {col, row}, [char | text], is_whitespace(char), is_blank}
 
-    tokenize(list, cur, [token | acc])
+    [token | tokenize(list, cur)]
   end
 
-  @spec extract_tag_text(charlist(), Ast.cursor(), charlist()) ::
+  defp tokenize([], _) do
+    []
+  end
+
+  @spec extract_tag_text(charlist(), Ast.cursor()) ::
           {charlist(), boolean(), charlist(), Ast.cursor()}
-  defp extract_tag_text(list, {col, row}, acc \\ [], is_blank \\ true) do
+  defp extract_tag_text(list, {col, row}) do
     case list do
       [char, next | tail] when char != ?< and [char, next] != '{{' and char != ?\n ->
-        extract_tag_text(
-          [next | tail],
-          {col + 1, row},
-          [char | acc],
-          is_blank && is_whitespace(char)
-        )
+        {acc, is_blank, rest, cur} = extract_tag_text([next | tail], {col + 1, row})
+
+        {[char | acc], is_blank && is_whitespace(char), rest, cur}
 
       [char] ->
-        {Enum.reverse([char | acc]), is_blank && is_whitespace(char), [],
-         next_cursor(char, {col, row})}
+        {[char], is_whitespace(char), [], {col, row}}
 
       _ ->
-        {Enum.reverse(acc), is_blank, list, {col, row}}
+        {[], true, list, {col, row}}
     end
   end
 
-  @spec extract_tag_output(charlist(), Ast.cursor(), charlist()) ::
+  @spec extract_tag_output(charlist(), Ast.cursor()) ::
           {charlist(), charlist(), Ast.cursor()}
-  defp extract_tag_output(list, {col, row}, acc \\ []) do
+  defp extract_tag_output(list, {col, row}) do
     case list do
       '}}' ++ tail ->
-        {Enum.reverse(acc), tail, {col + 2, row}}
+        {[], tail, {col + 2, row}}
 
       [char, next | tail] ->
-        extract_tag_output([next | tail], next_cursor(char, {col, row}), [char | acc])
+        {acc, rest, cur} = extract_tag_output([next | tail], next_cursor(char, {col, row}))
+
+        {[char | acc], rest, cur}
 
       [char | _] ->
         throw({:unexpected_token, {col, row}, char})
     end
   end
 
-  @spec extract_tag_end(charlist(), Ast.cursor()) :: {Ast.tag_end(), charlist(), Ast.cursor()}
+  @spec extract_tag_end(charlist(), Ast.cursor()) :: {charlist(), charlist(), Ast.cursor()}
   defp extract_tag_end(list, {col, row}) do
-    {name, list, cur} = extract_name(list, {col + 2, row})
-    {false, list, cur} = extract_tag_close(list, cur)
+    {name, rest, cur} = extract_name(list, {col, row})
+    {false, rest, cur} = extract_tag_close(rest, cur)
 
-    {{:tag_end, {col, row}, name}, list, cur}
+    {name, rest, cur}
   end
 
   @spec extract_tag_start(charlist(), Ast.cursor()) :: {Ast.tag_start(), charlist(), Ast.cursor()}
@@ -150,59 +150,65 @@ defmodule X.Tokenizer do
     }
   end
 
-  @spec extract_name(charlist(), Ast.cursor(), charlist()) ::
-          {charlist(), charlist(), Ast.cursor()}
-  defp extract_name(list = [char | rest], {col, row}, acc \\ []) do
-    cond do
-      is_namechar(char) -> extract_name(rest, {col + 1, row}, [char | acc])
-      true -> {Enum.reverse(acc), list, {col, row}}
+  @spec extract_name(charlist(), Ast.cursor()) :: {charlist(), charlist(), Ast.cursor()}
+  defp extract_name(list = [char | tail], {col, row}) do
+    case is_namechar(char) do
+      true ->
+        {acc, rest, cur} = extract_name(tail, {col + 1, row})
+
+        {[char | acc], rest, cur}
+
+      _ ->
+        {[], list, {col, row}}
     end
   end
 
   @spec extract_tag_attributes(
           charlist(),
-          Ast.cursor(),
-          [Ast.tag_attr()],
-          Ast.tag_condition() | nil,
-          Ast.tag_iterator() | nil
+          Ast.cursor()
         ) ::
           {[Ast.tag_attr()], Ast.tag_condition() | nil, Ast.tag_iterator() | nil, charlist(),
            Ast.cursor()}
-  defp extract_tag_attributes(list, cur, attrs \\ [], condition \\ nil, iterator \\ nil) do
+  defp extract_tag_attributes(list, cur) do
     {list, {col, row}} = skip_whitespace(list, cur)
 
     case list do
       [char | _] when char in '/>' ->
-        {Enum.reverse(attrs), condition, iterator, list, {col, row}}
+        {[], nil, nil, list, cur}
 
       'x-elseif' ++ tail ->
         cur = {col + 8, row}
         {value, list, cur} = extract_attr_value(tail, cur)
-        extract_tag_attributes(list, cur, attrs, {:elseif, cur, value}, iterator)
+        {acc, _, iterator, rest, cur} = extract_tag_attributes(list, cur)
+        {acc, {:elseif, cur, value}, iterator, rest, cur}
 
       'x-unless' ++ tail ->
         cur = {col + 8, row}
         {value, list, cur} = extract_attr_value(tail, cur)
-        extract_tag_attributes(list, cur, attrs, {:unless, cur, value}, iterator)
+        {acc, _, iterator, rest, cur} = extract_tag_attributes(list, cur)
+        {acc, {:unless, cur, value}, iterator, rest, cur}
 
       'x-else' ++ tail ->
         cur = {col + 6, row}
         {value, list, cur} = extract_attr_value(tail, cur)
-        extract_tag_attributes(list, cur, attrs, {:else, cur, value}, iterator)
+        {acc, _, iterator, rest, cur} = extract_tag_attributes(list, cur)
+        {acc, {:else, cur, value}, iterator, rest, cur}
 
       'x-for' ++ tail ->
         cur = {col + 5, row}
         {value, list, cur} = extract_attr_value(tail, cur)
-        extract_tag_attributes(list, cur, attrs, condition, {:for, cur, value})
+        {acc, condition, _, rest, cur} = extract_tag_attributes(list, cur)
+        {acc, condition, {:for, cur, value}, rest, cur}
 
       'x-if' ++ tail ->
-        cur = {col + 4, row}
-        {value, list, cur} = extract_attr_value(tail, cur)
-        extract_tag_attributes(list, cur, attrs, {:if, cur, value}, iterator)
+        {value, list, cur} = extract_attr_value(tail, {col + 4, row})
+        {acc, _, iterator, rest, cur} = extract_tag_attributes(list, cur)
+        {acc, {:if, cur, value}, iterator, rest, cur}
 
       _ ->
         {attr, list, cur} = extract_attribute(list, {col, row})
-        extract_tag_attributes(list, cur, [attr | attrs], condition, iterator)
+        {acc, condition, iterator, rest, cur} = extract_tag_attributes(list, cur)
+        {[attr | acc], condition, iterator, rest, cur}
     end
   end
 
@@ -256,23 +262,19 @@ defmodule X.Tokenizer do
     end
   end
 
-  @spec extract_value(charlist(), Ast.cursor(), charlist(), boolean(), charlist()) ::
+  @spec extract_value(charlist(), Ast.cursor(), charlist(), boolean()) ::
           {charlist(), charlist(), Ast.cursor()}
-  defp extract_value([char | rest], {col, row}, terminator, include_terminator, acc \\ []) do
+  defp extract_value([char | rest], {col, row}, terminator, include_terminator) do
     cur = next_cursor(char, {col, row})
 
     cond do
       char not in terminator ->
-        extract_value(rest, cur, terminator, include_terminator, [char | acc])
+        {acc, rest, cur} = extract_value(rest, cur, terminator, include_terminator)
+
+        {[char | acc], rest, cur}
 
       true ->
-        case include_terminator do
-          true ->
-            {Enum.reverse([char | acc]), rest, cur}
-
-          _ ->
-            {Enum.reverse(acc), rest, cur}
-        end
+        {(include_terminator && [char]) || [], rest, cur}
     end
   end
 

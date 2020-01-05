@@ -51,22 +51,13 @@ defmodule X.Parser do
   end
 
   @spec parse_text_group([Ast.token()]) :: {[Ast.leaf()], [Ast.token()]}
+  defp parse_text_group([token | tail]) when is_text_token(token) do
+    {acc, rest} = parse_text_group(tail)
+
+    {[{token, []} | acc], rest}
+  end
+
   defp parse_text_group(list) do
-    parse_text_group(list, [])
-  end
-
-  @spec parse_text_group([Ast.token()], [Ast.leaf()]) :: {[Ast.leaf()], [Ast.token()]}
-  defp parse_text_group(list = [token | tail], acc) do
-    cond do
-      is_text_token(token) ->
-        parse_text_group(tail, [{token, []} | acc])
-
-      true ->
-        {Enum.reverse(acc), list}
-    end
-  end
-
-  defp parse_text_group([], acc) do
-    {Enum.reverse(acc), []}
+    {[], list}
   end
 end

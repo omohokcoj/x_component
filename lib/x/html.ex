@@ -13,165 +13,192 @@ defmodule X.Html do
   def merge_attrs(base_attrs, merge_attrs) do
     merge_attrs = value_to_key_list(merge_attrs)
 
-    {merged_attrs, rest_attrs} =
-      base_attrs
-      |> value_to_key_list()
-      |> Enum.reduce({[], merge_attrs}, fn {b_key, b_value}, {acc, merge_attrs} ->
-        case List.keytake(merge_attrs, b_key, 0) do
-          {{m_key, m_value}, rest} when m_key in @merge_attr_names ->
-            {[{m_key, merge_attrs(b_value, m_value)} | acc], rest}
-
-          {m_attr, rest} ->
-            {[m_attr | acc], rest}
-
-          nil ->
-            {[{b_key, b_value} | acc], merge_attrs}
-        end
-      end)
-
-    rest_attrs ++ merged_attrs
+    base_attrs
+    |> value_to_key_list()
+    |> do_merge_attrs(merge_attrs)
   end
 
-  @spec attrs_to_string(map() | [{atom() | String.t(), any()}]) :: String.t()
-  def attrs_to_string(attrs) when is_map(attrs) or is_list(attrs) do
+  @spec attrs_to_iodata(map() | [{atom() | String.t(), any()}]) :: String.t()
+  def attrs_to_iodata(attrs) when is_map(attrs) do
     attrs
-    |> Enum.reduce(:first, fn
-      {_, false}, acc ->
-        acc
-
-      {key, value}, acc ->
-        string_key = to_string(key)
-        string_value = escape(attr_value_to_string(value, string_key))
-        attr_list = [string_key, '="', string_value, '"']
-
-        if(acc == :first, do: attr_list, else: [attr_list, ?\s | acc])
-    end)
-    |> IO.iodata_to_binary()
+    |> Map.to_list()
+    |> attr_value_to_iodata()
   end
 
-  @spec attr_value_to_string(any()) :: String.t()
-  def attr_value_to_string(value) do
-    attr_value_to_string(value, "")
+  def attrs_to_iodata([{_, value} | tail]) when value in [nil, false] do
+    attrs_to_iodata(tail)
   end
 
-  @spec attr_value_to_string(any(), String.t()) :: String.t()
-  def attr_value_to_string(value = %{__struct__: _}, _) do
-    to_string(value)
-  end
+  def attrs_to_iodata([{key, value} | tail]) do
+    string_key = to_string(key)
+    value_iodata = attr_value_to_iodata(value, string_key)
+    attr_list = [to_safe_iodata(string_key), '="', value_iodata, '"']
 
-  def attr_value_to_string(value, key) when is_tuple(value) do
-    value
-    |> Tuple.to_list()
-    |> attr_value_to_string(key)
-  end
-
-  def attr_value_to_string(value, _) when is_binary(value) do
-    value
-  end
-
-  def attr_value_to_string(true, _) do
-    "true"
-  end
-
-  def attr_value_to_string(value, _) when is_number(value) do
-    to_string(value)
-  end
-
-  def attr_value_to_string(value, key) when is_map(value) and key not in @merge_attr_names do
-    X.json_library().encode!(value)
-  end
-
-  def attr_value_to_string(value, key) when is_map(value) or is_list(value) do
-    delimiter =
-      case key do
-        "style" -> ?;
-        _ -> ?\s
-      end
-
-    value
-    |> Enum.reduce(:first, fn
-      {_, value}, acc when is_nil(value) or value == false ->
-        acc
-
-      elem, acc ->
-        result =
-          case elem do
-            {key, value} when is_binary(value) -> [to_string(key), ?:, value]
-            {key, value} when is_number(value) -> [to_string(key), ?:, to_string(value)]
-            {key, true} -> to_string(key)
-            key -> to_string(key)
-          end
-
-        if(acc == :first, do: result, else: [result, delimiter | acc])
-    end)
-    |> IO.iodata_to_binary()
-  end
-
-  def to_safe_string(value) when is_binary(value) do
-    escape(value)
-  end
-
-  def to_safe_string(value) when is_number(value) do
-    to_string(value)
-  end
-
-  def to_safe_string(value) do
-    escape(to_string(value))
-  end
-
-  # https://github.com/elixir-plug/plug/blob/master/lib/plug/html.ex
-  @spec escape(String.t()) :: String.t()
-  def escape(data) when is_binary(data) do
-    IO.iodata_to_binary(to_iodata(data, 0, data, []))
-  end
-
-  for {match, insert} <- @escape_chars do
-    defp to_iodata(<<unquote(match), rest::bits>>, skip, original, acc) do
-      to_iodata(rest, skip + 1, original, [acc | unquote(insert)])
+    case tail do
+      [] -> [attr_list | attrs_to_iodata(tail)]
+      _ -> [attr_list, ?\s | attrs_to_iodata(tail)]
     end
   end
 
-  defp to_iodata(<<_char, rest::bits>>, skip, original, acc) do
-    to_iodata(rest, skip, original, acc, 1)
+  def attrs_to_iodata([]) do
+    []
   end
 
-  defp to_iodata(<<>>, _skip, _original, acc) do
+  @spec attr_value_to_iodata(any()) :: String.t()
+  @spec attr_value_to_iodata(any(), String.t()) :: String.t()
+  def attr_value_to_iodata(value, key \\ "")
+
+  def attr_value_to_iodata(value, key) when is_tuple(value) do
+    value
+    |> Tuple.to_list()
+    |> attr_value_to_iodata(key)
+  end
+
+  def attr_value_to_iodata(true, _) do
+    "true"
+  end
+
+  def attr_value_to_iodata(value, key) when is_map(value) and key not in @merge_attr_names do
+    X.json_library().encode!(value, %{escape: :html_safe})
+  end
+
+  def attr_value_to_iodata(value, key) when is_map(value) or is_list(value) do
+    delimiter = if(key == "style", do: ";", else: " ")
+
+    value
+    |> Enum.to_list()
+    |> join_values_to_iodata(delimiter)
+  end
+
+  def attr_value_to_iodata(value, _) do
+    to_safe_iodata(value)
+  end
+
+  def to_safe_string(value) do
+    value
+    |> to_safe_iodata()
+    |> IO.iodata_to_binary()
+  end
+
+  @spec to_safe_iodata(any()) :: String.t()
+  def to_safe_iodata(value) when is_binary(value) do
+    escape_to_iodata(value, 0, value, [])
+  end
+
+  def to_safe_iodata(value) when is_integer(value) do
+    :erlang.integer_to_binary(value)
+  end
+
+  def to_safe_iodata(value) when is_float(value) do
+    :io_lib_format.fwrite_g(value)
+  end
+
+  def to_safe_iodata(value) do
+    data = to_string(value)
+
+    escape_to_iodata(data, 0, data, [])
+  end
+
+  @spec value_to_key_list(any()) :: [{String.t(), any()}]
+  def value_to_key_list([head | tail]) do
+    result =
+      case head do
+        {key, value} -> {to_string(key), value}
+        key -> {to_string(key), true}
+      end
+
+    [result | value_to_key_list(tail)]
+  end
+
+  def value_to_key_list([]) do
+    []
+  end
+
+  def value_to_key_list(value) when is_map(value) do
+    value
+    |> Map.to_list()
+    |> value_to_key_list()
+  end
+
+  def value_to_key_list(value) do
+    [{to_string(value), true}]
+  end
+
+  @spec join_values_to_iodata([{any(), any()}], String.t()) :: iodata()
+  defp join_values_to_iodata([{_, value} | tail], delimiter) when value in [nil, false] do
+    join_values_to_iodata(tail, delimiter)
+  end
+
+  defp join_values_to_iodata([head | tail], delimiter) do
+    result =
+      case head do
+        {key, true} ->
+          to_safe_iodata(key)
+
+        {key, value} ->
+          [to_safe_iodata(key), ?:, to_safe_iodata(value)]
+
+        key ->
+          to_safe_iodata(key)
+      end
+
+    case tail do
+      [] -> [result | join_values_to_iodata(tail, delimiter)]
+      _ -> [result, delimiter | join_values_to_iodata(tail, delimiter)]
+    end
+  end
+
+  defp join_values_to_iodata([], _) do
+    []
+  end
+
+  @spec do_merge_attrs([{String.t(), any()}], [{String.t(), any()}]) :: [{String.t(), any()}]
+  defp do_merge_attrs(base_attrs, merge_attrs) do
+    Enum.reduce(base_attrs, merge_attrs, fn {b_key, b_value}, acc ->
+      case List.keytake(acc, b_key, 0) do
+        {{m_key, m_value}, rest} when m_key in @merge_attr_names ->
+          [{m_key, merge_attrs(b_value, m_value)} | rest]
+
+        {m_attr, rest} ->
+          [m_attr | rest]
+
+        nil ->
+          [{b_key, b_value} | acc]
+      end
+    end)
+  end
+
+  # https://github.com/elixir-plug/plug/blob/master/lib/plug/html.ex
+  for {match, insert} <- @escape_chars do
+    defp escape_to_iodata(<<unquote(match), rest::bits>>, skip, original, acc) do
+      escape_to_iodata(rest, skip + 1, original, [acc | unquote(insert)])
+    end
+  end
+
+  defp escape_to_iodata(<<_char, rest::bits>>, skip, original, acc) do
+    escape_to_iodata(rest, skip, original, acc, 1)
+  end
+
+  defp escape_to_iodata(<<>>, _skip, _original, acc) do
     acc
   end
 
   for {match, insert} <- @escape_chars do
-    defp to_iodata(<<unquote(match), rest::bits>>, skip, original, acc, len) do
+    defp escape_to_iodata(<<unquote(match), rest::bits>>, skip, original, acc, len) do
       part = binary_part(original, skip, len)
-      to_iodata(rest, skip + len + 1, original, [acc, part | unquote(insert)])
+      escape_to_iodata(rest, skip + len + 1, original, [acc, part | unquote(insert)])
     end
   end
 
-  defp to_iodata(<<_char, rest::bits>>, skip, original, acc, len) do
-    to_iodata(rest, skip, original, acc, len + 1)
+  defp escape_to_iodata(<<_char, rest::bits>>, skip, original, acc, len) do
+    escape_to_iodata(rest, skip, original, acc, len + 1)
   end
 
-  defp to_iodata(<<>>, 0, original, _acc, _len) do
+  defp escape_to_iodata(<<>>, 0, original, _acc, _len) do
     original
   end
 
-  defp to_iodata(<<>>, skip, original, acc, len) do
+  defp escape_to_iodata(<<>>, skip, original, acc, len) do
     [acc | binary_part(original, skip, len)]
-  end
-
-  @spec value_to_key_list(any()) :: [{String.t(), any()}]
-  defp value_to_key_list(nil) do
-    []
-  end
-
-  defp value_to_key_list(value) when is_map(value) or is_list(value) do
-    Enum.reduce(value, [], fn
-      {key, value}, acc -> [{to_string(key), value} | acc]
-      [], acc -> acc
-      key, acc -> [{to_string(key), true} | acc]
-    end)
-  end
-
-  defp value_to_key_list(value) do
-    [{to_string(value), true}]
   end
 end
