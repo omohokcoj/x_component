@@ -49,8 +49,8 @@ defmodule X.Html do
     |> IO.iodata_to_binary()
   end
 
-  @spec attr_value_to_string(any()) :: String.t()
-  def attr_value_to_string(value) do
+  @spec attr_to_string(any()) :: String.t()
+  def attr_to_string(value) do
     attr_value_to_string(value, "")
   end
 
