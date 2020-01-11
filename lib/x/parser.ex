@@ -35,7 +35,7 @@ defmodule X.Parser do
   defp parse([{:tag_end, cur, name} | tail], scope, acc) do
     case scope do
       ^name ->
-        {Enum.reverse(acc), tail}
+        {:lists.reverse(acc), tail}
 
       _ ->
         throw({:unexpected_tag, cur, scope, name})
@@ -47,7 +47,7 @@ defmodule X.Parser do
   end
 
   defp parse([], _, acc) do
-    {Enum.reverse(acc), []}
+    {:lists.reverse(acc), []}
   end
 
   @spec parse_text_group([Ast.token()]) :: {[Ast.leaf()], [Ast.token()]}

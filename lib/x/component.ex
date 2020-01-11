@@ -12,13 +12,16 @@ defmodule X.Component do
   ]
 
   defmacro __using__(options) when is_list(options) do
-    {template_ast, template} = fetch_template(options)
+    {template, line} = fetch_template(options)
+
+    template_ast =
+      X.compile_string!(template, __CALLER__, line: line, inline: X.compile_inline?())
+
     assigns_ast = fetch_assigns(options, __CALLER__)
+    assigns_list = build_assigns_list(assigns_ast)
     component_doc = build_component_doc(template, assigns_ast)
 
     quote do
-      use X.Template
-
       @moduledoc if @moduledoc,
                    do: Enum.join([@moduledoc, unquote(component_doc)], "\n"),
                    else: unquote(component_doc)
@@ -28,19 +31,33 @@ defmodule X.Component do
         unquote(template)
       end
 
+      @spec template_ast() :: Macro.t()
+      def template_ast do
+        unquote(Macro.escape(template_ast))
+      end
+
+      @spec assigns() :: [{name :: atom(), required :: boolean()}]
+      def assigns do
+        unquote(assigns_list)
+      end
+
       X.Component.define_render_functions(unquote(template_ast), unquote(assigns_ast))
     end
   end
 
   defmacro define_render_functions(template_ast, assigns_ast) do
     assigns_typespec = build_assigns_typespec(assigns_ast)
-    assigns_vars_ast = build_assigns_vars_ast(assigns_ast, __CALLER__)
+    {optional_vars_ast, required_vars_ast} = build_assigns_vars_ast(assigns_ast, __CALLER__)
+
+    %{module: module} = __CALLER__
 
     quote do
       @spec render_to_string(unquote(assigns_typespec)) :: String.t()
       @spec render_to_string(unquote(assigns_typespec), [{:do, iodata() | nil}]) :: String.t()
       def render_to_string(assigns, options \\ [do: nil]) do
-        IO.iodata_to_binary(render(assigns, options))
+        assigns
+        |> render(options)
+        |> IO.iodata_to_binary()
       end
 
       @spec render(unquote(assigns_typespec)) :: iodata()
@@ -49,23 +66,26 @@ defmodule X.Component do
       end
 
       @spec render(unquote(assigns_typespec), [{:do, iodata() | nil}]) :: iodata()
-      def render(var!(assigns), [{:do, var!(yield)}]) do
-        _ = var!(yield)
-        _ = var!(assigns)
-        unquote(assigns_vars_ast)
+      def render(
+            unquote(Macro.var(:assigns, nil)) = unquote({:%{}, [], required_vars_ast}),
+            [{:do, unquote(Macro.var(:yield, module))}]
+          ) do
+        _ = unquote(Macro.var(:assigns, nil))
+        _ = unquote(Macro.var(:yield, module))
+        unquote_splicing(optional_vars_ast)
         unquote(template_ast)
       end
     end
   end
 
-  @spec fetch_template(options()) :: {Macro.t(), String.t()}
+  @spec fetch_template(options()) :: {Macro.t(), integer() | nil}
   defp fetch_template(options) do
     case Keyword.get(options, :template, "") do
-      ast = {:sigil_X, _, [{:<<>>, _, [template]} | _]} ->
-        {ast, template}
+      {:sigil_X, _, [{:<<>>, [line: line], [template]} | _]} ->
+        {template, line}
 
       template when is_bitstring(template) ->
-        {quote(do: X.Template.sigil_X(unquote(template), [])), template}
+        {template, nil}
     end
   end
 
@@ -86,6 +106,23 @@ defmodule X.Component do
         ast ->
           ast
       end)
+    end
+  end
+
+  @spec build_assigns_list(Macro.t()) :: [{name :: atom(), required :: boolean()}]
+  defp build_assigns_list(assigns_ast) do
+    case assigns_ast do
+      {:%{}, _, assigns} ->
+        Enum.map(assigns, fn
+          {{spec, _, [attr]}, _} ->
+            {attr, spec != :optional}
+
+          {attr, _} ->
+            {attr, true}
+        end)
+
+      assigns ->
+        Enum.map(assigns, &{&1, true})
     end
   end
 
@@ -112,25 +149,30 @@ defmodule X.Component do
     {:%{}, context, assigns ++ optional_keys}
   end
 
-  @spec build_assigns_vars_ast(Macro.t() | [atom()], any()) :: Macro.t()
+  @spec build_assigns_vars_ast(Macro.t() | [atom()], any()) :: {Macro.t(), Macro.t()}
   defp build_assigns_vars_ast({:%{}, [_], assigns}, env) do
-    Enum.map(assigns, fn
-      {{:optional, [line: line], [attr]}, _} ->
+    %{module: module} = env
+
+    Enum.reduce(assigns, {[], []}, fn
+      {{:optional, [line: line], [attr]}, _}, {optional, required} ->
         maybe_warn_reserved_attribute(attr, %{env | line: line})
 
-        quote do
-          unquote(Macro.var(attr, nil)) = Map.get(var!(assigns), unquote(attr))
-        end
+        {[
+           quote do
+             unquote(Macro.var(attr, module)) =
+               Map.get(unquote(Macro.var(:assigns, nil)), unquote(attr))
+           end
+           | optional
+         ], required}
 
-      {attr, _} ->
+      {attr, _}, {optional, required} ->
         maybe_warn_reserved_attribute(attr, env)
 
-        quote do
-          unquote(Macro.var(attr, nil)) = var!(assigns).unquote(attr)
-        end
+        {optional, [{attr, Macro.var(attr, module)} | required]}
     end)
   end
 
+  @spec maybe_warn_reserved_attribute(atom(), Macro.Env.t()) :: :ok | nil
   defp maybe_warn_reserved_attribute(attr, env) do
     if attr in @reserved_dynamic_attrs do
       IO.warn(

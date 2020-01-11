@@ -138,7 +138,7 @@ defmodule Mix.Tasks.X.Format do
 
   defp format_file({file, _}) do
     {input, _} = read_file(file)
-    output = IO.iodata_to_binary([X.format_file!(input), ?\n])
+    output = X.format_file!(input)
 
     write_file(file, input, output)
   rescue

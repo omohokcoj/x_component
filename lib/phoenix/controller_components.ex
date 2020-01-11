@@ -12,7 +12,7 @@ if Code.ensure_compiled?(Phoenix.Controller) do
           Keyword.get(
             unquote(opts),
             :components_module,
-            unquote(__MODULE__).components_for_controller(__MODULE__)
+            unquote(__MODULE__).components_module_for_controller(__MODULE__)
           )
 
         plug :put_components_module, components_module
@@ -38,7 +38,7 @@ if Code.ensure_compiled?(Phoenix.Controller) do
           components_module
 
         %{private: %{phoenix_controller: phoenix_controller}} ->
-          components_for_controller(phoenix_controller)
+          X.root_module() || components_module_for_controller(phoenix_controller)
       end
     end
 
@@ -59,8 +59,8 @@ if Code.ensure_compiled?(Phoenix.Controller) do
       |> put_component()
     end
 
-    @spec components_for_controller(atom()) :: atom()
-    def components_for_controller(module) do
+    @spec components_module_for_controller(atom()) :: atom()
+    def components_module_for_controller(module) do
       module
       |> to_string()
       |> String.replace("Controller", "s")

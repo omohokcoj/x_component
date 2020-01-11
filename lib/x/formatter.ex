@@ -6,13 +6,12 @@ defmodule X.Formatter do
 
   @script_tags ['script', 'style']
 
-  @spec call([Ast.leaf()], options()) :: String.t()
+  @spec call([Ast.leaf()], options()) :: iodata()
   def call(tree, options \\ []) do
     tree
     |> ast_to_doc()
     |> A.nest(Keyword.get(options, :nest, 0))
     |> A.format(:infinity)
-    |> IO.iodata_to_binary()
   end
 
   @spec ast_to_doc([Ast.leaf()]) :: A.t()

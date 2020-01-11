@@ -1,9 +1,4 @@
 defmodule X.Template do
-  @type env() :: [
-          {:line, integer()}
-          | {:file, String.t()}
-        ]
-
   defmacro __using__(_) do
     quote do
       import unquote(__MODULE__)
@@ -11,10 +6,10 @@ defmodule X.Template do
   end
 
   defmacro sigil_X(expr, opts) do
-    handle_sigil(expr, opts, line: __CALLER__.line, file: __CALLER__.file)
+    handle_sigil(expr, opts, __CALLER__)
   end
 
-  @spec handle_sigil(Macro.t(), list(), env()) :: Macro.t()
+  @spec handle_sigil(Macro.t(), list(), Macro.Env.t()) :: Macro.t()
   defp handle_sigil({:<<>>, _, [expr]}, [], env) do
     X.compile_string!(expr, env)
   end

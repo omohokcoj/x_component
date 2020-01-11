@@ -15,10 +15,21 @@ defmodule X.Html do
 
     base_attrs
     |> value_to_key_list()
-    |> do_merge_attrs(merge_attrs)
+    |> Enum.reduce(merge_attrs, fn {b_key, b_value}, acc ->
+      case List.keytake(acc, b_key, 0) do
+        {{m_key, m_value}, rest} when m_key in @merge_attr_names ->
+          [{m_key, merge_attrs(b_value, m_value)} | rest]
+
+        {m_attr, rest} ->
+          [m_attr | rest]
+
+        nil ->
+          [{b_key, b_value} | acc]
+      end
+    end)
   end
 
-  @spec attrs_to_iodata(map() | [{atom() | String.t(), any()}]) :: String.t()
+  @spec attrs_to_iodata(map() | [{atom() | String.t(), any()}]) :: iodata()
   def attrs_to_iodata(attrs) when is_map(attrs) do
     attrs
     |> Map.to_list()
@@ -44,22 +55,16 @@ defmodule X.Html do
     []
   end
 
-  @spec attr_value_to_iodata(any()) :: String.t()
-  @spec attr_value_to_iodata(any(), String.t()) :: String.t()
+  @spec attr_value_to_iodata(any()) :: iodata()
+  @spec attr_value_to_iodata(any(), String.t()) :: iodata()
   def attr_value_to_iodata(value, key \\ "")
-
-  def attr_value_to_iodata(value, key) when is_tuple(value) do
-    value
-    |> Tuple.to_list()
-    |> attr_value_to_iodata(key)
-  end
 
   def attr_value_to_iodata(true, _) do
     "true"
   end
 
   def attr_value_to_iodata(value, key) when is_map(value) and key not in @merge_attr_names do
-    X.json_library().encode!(value, %{escape: :html_safe})
+    to_safe_iodata(value)
   end
 
   def attr_value_to_iodata(value, key) when is_map(value) or is_list(value) do
@@ -74,13 +79,7 @@ defmodule X.Html do
     to_safe_iodata(value)
   end
 
-  def to_safe_string(value) do
-    value
-    |> to_safe_iodata()
-    |> IO.iodata_to_binary()
-  end
-
-  @spec to_safe_iodata(any()) :: String.t()
+  @spec to_safe_iodata(any()) :: iodata()
   def to_safe_iodata(value) when is_binary(value) do
     escape_to_iodata(value, 0, value, [])
   end
@@ -93,14 +92,32 @@ defmodule X.Html do
     :io_lib_format.fwrite_g(value)
   end
 
-  def to_safe_iodata(value) do
-    data = to_string(value)
+  def to_safe_iodata(value = %module{}) when module in [Date, Time, NaiveDateTime, Decimal] do
+    module.to_string(value)
+  end
 
-    escape_to_iodata(data, 0, data, [])
+  def to_safe_iodata(value = %DateTime{}) do
+    value
+    |> to_string()
+    |> to_safe_iodata()
+  end
+
+  if Code.ensure_compiled?(X.json_library()) do
+    def to_safe_iodata(value) when is_map(value) do
+      value
+      |> X.json_library().encode!(%{escape: :html_safe})
+      |> to_safe_iodata()
+    end
+  end
+
+  def to_safe_iodata(value) do
+    value
+    |> to_string()
+    |> to_safe_iodata()
   end
 
   @spec value_to_key_list(any()) :: [{String.t(), any()}]
-  def value_to_key_list([head | tail]) do
+  defp value_to_key_list([head | tail]) do
     result =
       case head do
         {key, value} -> {to_string(key), value}
@@ -110,17 +127,17 @@ defmodule X.Html do
     [result | value_to_key_list(tail)]
   end
 
-  def value_to_key_list([]) do
+  defp value_to_key_list([]) do
     []
   end
 
-  def value_to_key_list(value) when is_map(value) do
+  defp value_to_key_list(value) when is_map(value) do
     value
     |> Map.to_list()
     |> value_to_key_list()
   end
 
-  def value_to_key_list(value) do
+  defp value_to_key_list(value) do
     [{to_string(value), true}]
   end
 
@@ -136,7 +153,7 @@ defmodule X.Html do
           to_safe_iodata(key)
 
         {key, value} ->
-          [to_safe_iodata(key), ?:, to_safe_iodata(value)]
+          [to_safe_iodata(key), ": ", to_safe_iodata(value)]
 
         key ->
           to_safe_iodata(key)
@@ -152,23 +169,9 @@ defmodule X.Html do
     []
   end
 
-  @spec do_merge_attrs([{String.t(), any()}], [{String.t(), any()}]) :: [{String.t(), any()}]
-  defp do_merge_attrs(base_attrs, merge_attrs) do
-    Enum.reduce(base_attrs, merge_attrs, fn {b_key, b_value}, acc ->
-      case List.keytake(acc, b_key, 0) do
-        {{m_key, m_value}, rest} when m_key in @merge_attr_names ->
-          [{m_key, merge_attrs(b_value, m_value)} | rest]
-
-        {m_attr, rest} ->
-          [m_attr | rest]
-
-        nil ->
-          [{b_key, b_value} | acc]
-      end
-    end)
-  end
-
   # https://github.com/elixir-plug/plug/blob/master/lib/plug/html.ex
+  @spec escape_to_iodata(binary(), integer(), binary(), iodata()) :: iodata()
+  @spec escape_to_iodata(binary(), integer(), binary(), iodata(), integer()) :: iodata()
   for {match, insert} <- @escape_chars do
     defp escape_to_iodata(<<unquote(match), rest::bits>>, skip, original, acc) do
       escape_to_iodata(rest, skip + 1, original, [acc | unquote(insert)])
