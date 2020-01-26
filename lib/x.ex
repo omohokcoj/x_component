@@ -62,9 +62,9 @@ defmodule X do
     Application.get_env(:x_component, :root_path)
   end
 
-  @spec generator_template() :: String.t()
+  @spec generator_template() :: String.t() | nil
   def generator_template do
-    Application.get_env(:x_component, :generator_template, "")
+    Application.get_env(:x_component, :generator_template)
   end
 
   defp process_exception({:unexpected_tag, {_, row}, nil, actual_tag}, env, opts) do
