@@ -148,7 +148,7 @@ defmodule X.Transformer do
           ]
       end
 
-    [_, {:->, _, [[{:_, _, _}], [attrs_iodata]]}] = Keyword.get(block_ast, :do)
+    [_, {:->, _, [[{:_, _, _}], attrs_iodata]}] = Keyword.get(block_ast, :do)
 
     [
       ?\s,
