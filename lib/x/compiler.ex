@@ -4,7 +4,7 @@ defmodule X.Compiler do
   import X.Transformer,
     only: [
       compact_ast: 1,
-      transform_expresion: 2,
+      transform_expresion: 3,
       transform_inline_component: 4
     ]
 
@@ -17,6 +17,7 @@ defmodule X.Compiler do
 
   @type options() :: [
           {:inline, boolean()}
+          | {:context, atom()}
           | {:line, integer()}
         ]
 
@@ -298,7 +299,7 @@ defmodule X.Compiler do
   defp compile_expr(charlist, {_, row}, env, opts) do
     quoted = Code.string_to_quoted!(charlist, line: row + Keyword.get(opts, :line, env.line))
 
-    transform_expresion(quoted, env)
+    transform_expresion(quoted, Keyword.get(opts, :context), env)
   end
 
   @spec compile_component(

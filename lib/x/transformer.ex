@@ -10,10 +10,8 @@ defmodule X.Transformer do
     tree
   end
 
-  @spec transform_expresion(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def transform_expresion(ast, env) do
-    %{module: module} = env
-
+  @spec transform_expresion(Macro.t(), atom(), Macro.Env.t()) :: Macro.t()
+  def transform_expresion(ast, context, env) do
     Macro.postwalk(ast, fn
       {:@, meta, [{name, _, atom}]} when is_atom(name) and is_atom(atom) ->
         line = Keyword.get(meta, :line, 0)
@@ -23,7 +21,7 @@ defmodule X.Transformer do
             quote(line: line, do: unquote(Macro.var(:assigns, nil)))
 
           :yield ->
-            quote(line: line, do: unquote(Macro.var(:yield, module)))
+            quote(line: line, do: unquote(Macro.var(:yield, context)))
 
           _ ->
             quote line: line do
@@ -35,9 +33,9 @@ defmodule X.Transformer do
         Macro.expand(ast, env)
 
       {variable, meta, nil} when is_atom(variable) ->
-        {variable, meta, module}
+        {variable, meta, context}
 
-      ast = {function, _, args} when is_atom(function) and is_list(args) ->
+      ast = {function, _, args} when not is_nil(context) and is_atom(function) and is_list(args) ->
         alias_function(ast, env)
 
       a ->

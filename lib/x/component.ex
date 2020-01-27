@@ -14,8 +14,8 @@ defmodule X.Component do
   defmacro __using__(options) when is_list(options) do
     {template, line} = fetch_template(options)
 
-    template_ast =
-      X.compile_string!(template, __CALLER__, line: line, inline: X.compile_inline?())
+    compiler_opts = [line: line, inline: X.compile_inline?(), context: __CALLER__.module]
+    template_ast = X.compile_string!(template, __CALLER__, compiler_opts)
 
     assigns_ast = fetch_assigns(options, __CALLER__)
     assigns_list = build_assigns_list(assigns_ast)
