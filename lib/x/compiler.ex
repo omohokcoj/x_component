@@ -26,6 +26,7 @@ defmodule X.Compiler do
   @spec call([Ast.leaf()], Macro.Env.t(), options()) :: Macro.t()
   def call(tree, env \\ __ENV__, opts \\ []) when is_map(env) do
     tree
+    |> Ast.drop_whitespace()
     |> compile_tree(env, opts)
     |> compact_ast()
   end
@@ -49,14 +50,14 @@ defmodule X.Compiler do
     compile_text_group(list, env, opts, [])
   end
 
-  defp compile({{:tag_output, cur = {row, _}, body, true}, _}, env, opts) do
-    quote line: row + Keyword.get(opts, :line, env.line) do
+  defp compile({{:tag_output, cur = {_, row}, body, true}, _}, env, opts) do
+    quote line: row + Keyword.get(opts, :line, 0) do
       X.Html.to_safe_iodata(unquote(compile_expr(body, cur, env, opts)))
     end
   end
 
-  defp compile({{:tag_output, cur = {row, _}, body, false}, _}, env, opts) do
-    quote line: row + Keyword.get(opts, :line, env.line) do
+  defp compile({{:tag_output, cur = {_, row}, body, false}, _}, env, opts) do
+    quote line: row + Keyword.get(opts, :line, 0) do
       unquote(compile_expr(body, cur, env, opts))
     end
   end
@@ -89,13 +90,13 @@ defmodule X.Compiler do
         attr, {component, is_tag, acc} -> {component, is_tag, [attr | acc]}
       end)
 
-    children_ast = compile_tree(children, env, opts)
-
     cond do
       component ->
         compile_component(component, attrs, children, cur, env, opts)
 
       is_tag ->
+        children_ast = compile_tree(children, env, opts)
+
         tag_ast = compile_expr(is_tag, cur, env, opts)
         attrs_ast = compile_attrs(:lists.reverse(attrs), env, opts)
         tag_ast = quote(do: :erlang.iolist_to_binary(unquote(tag_ast)))
@@ -103,7 +104,9 @@ defmodule X.Compiler do
         [?<, tag_ast, attrs_ast, ?>, children_ast, "</", tag_ast, ?>]
 
       true ->
-        children_ast
+        children
+        |> Ast.drop_whitespace()
+        |> compile_tree(env, opts)
     end
   end
 
@@ -143,36 +146,38 @@ defmodule X.Compiler do
     {attrs_ast, base_attrs, merge_attrs, static_attr_tokens} =
       group_and_transform_tag_attrs(attrs, env, opts)
 
+    static_attrs_ast = Enum.map(static_attr_tokens, &compile_attr(&1, env, opts))
+
     case {attrs_ast, merge_attrs} do
       {nil, []} ->
-        Enum.map(static_attr_tokens, &compile_attr(&1, env, opts))
+        static_attrs_ast
 
       {nil, _} ->
+        base_attrs = X.Html.merge_attrs(base_attrs, merge_attrs)
+
         [
           ?\s,
           quote do
-            X.Html.attrs_to_iodata(X.Html.merge_attrs(unquote(base_attrs), unquote(merge_attrs)))
+            X.Html.attrs_to_iodata(unquote(base_attrs))
           end
-          | Enum.map(static_attr_tokens, &compile_attr(&1, env, opts))
+          | static_attrs_ast
         ]
 
       _ ->
+        static_attrs = Enum.map(static_attr_tokens, &attr_token_to_tuple(&1, env, opts))
+        base_attrs = X.Html.merge_attrs(base_attrs, merge_attrs)
+
         quote do
-          case {unquote(attrs_ast), unquote(base_attrs)} do
-            {attrs_, base_attrs_} when attrs_ not in [nil, []] or base_attrs_ != [] ->
+          case unquote({:{}, [], [attrs_ast, base_attrs, static_attrs]}) do
+            {attrs_, base_attrs_, static_attrs_}
+            when attrs_ not in [nil, []] or base_attrs_ != [] ->
               [
                 ?\s,
-                X.Html.attrs_to_iodata(
-                  X.Html.merge_attrs(
-                    X.Html.merge_attrs(base_attrs_, unquote(merge_attrs)) ++
-                      unquote(Enum.map(static_attr_tokens, &attr_token_to_tuple(&1, env, opts))),
-                    attrs_
-                  )
-                )
+                X.Html.attrs_to_iodata(X.Html.merge_attrs(base_attrs_ ++ static_attrs_, attrs_))
               ]
 
             _ ->
-              unquote(Enum.map(static_attr_tokens, &compile_attr(&1, env, opts)))
+              unquote(static_attrs_ast)
           end
         end
     end
@@ -182,15 +187,25 @@ defmodule X.Compiler do
   defp compile_attr({:tag_attr, cur, name, value, true}, env, opts) do
     name_string = :erlang.iolist_to_binary(name)
 
-    value_ast =
-      quote do
-        X.Html.attr_value_to_iodata(
-          unquote(compile_expr(value, cur, env, opts)),
-          unquote(name_string)
-        )
-      end
+    quote do
+      case unquote(compile_expr(value, cur, env, opts)) do
+        true ->
+          unquote(" " <> name_string <> "=\"true\"")
 
-    [?\s, name_string, ?=, ?", value_ast, ?"]
+        value when value not in [nil, false] ->
+          [
+            unquote(" " <> name_string <> "=\""),
+            X.Html.attr_value_to_iodata(
+              value,
+              unquote(name_string)
+            ),
+            ?"
+          ]
+
+        _ ->
+          []
+      end
+    end
   end
 
   defp compile_attr({:tag_attr, _cur, name, [], false}, _env, _opts) do
@@ -241,11 +256,11 @@ defmodule X.Compiler do
     compile_cond_expr({:if, cur, '!(' ++ expr ++ ')'}, ast, tail, env, opts)
   end
 
-  defp compile_cond_expr(condition = {:if, cur, expr}, ast, tail, env, opts) do
+  defp compile_cond_expr(condition = {:if, cur = {_, row}, expr}, ast, tail, env, opts) do
     {else_ast, tail} = find_cond_else_expr(condition, ast, tail, env, opts)
 
     ast =
-      quote do
+      quote line: row + Keyword.get(opts, :line, 0) do
         if(unquote(compile_expr(expr, cur, env, opts)),
           do: unquote(compact_ast(ast)),
           else: unquote(compact_ast(else_ast))
@@ -280,14 +295,14 @@ defmodule X.Compiler do
   end
 
   @spec compile_for_expr(Ast.tag_iterator(), Macro.t(), Macro.Env.t(), options()) :: Macro.t()
-  defp compile_for_expr({:for, cur, expr}, ast, env, opts) do
+  defp compile_for_expr({:for, cur = {_, row}, expr}, ast, env, opts) do
     expr =
       case expr do
-        '[' ++ expr -> expr
+        '[' ++ _ -> expr
         _ -> [?[ | expr] ++ ']'
       end
 
-    quote do
+    quote line: row + Keyword.get(opts, :line, 0) do
       for(unquote_splicing(compile_expr(expr, cur, env, opts)),
         do: unquote(compact_ast(ast)),
         into: []
@@ -297,7 +312,7 @@ defmodule X.Compiler do
 
   @spec compile_expr(charlist(), Ast.cursor(), Macro.Env.t(), options()) :: Macro.t()
   defp compile_expr(charlist, {_, row}, env, opts) do
-    quoted = Code.string_to_quoted!(charlist, line: row + Keyword.get(opts, :line, env.line))
+    quoted = Code.string_to_quoted!(charlist, line: row + Keyword.get(opts, :line, 0))
 
     transform_expresion(quoted, Keyword.get(opts, :context), env)
   end
@@ -314,8 +329,7 @@ defmodule X.Compiler do
   defp compile_component(component, attrs, children, cur = {_, row}, env, opts) do
     component_ast = compile_expr(component, cur, env, opts)
     assigns_ast = compile_assigns(attrs, env, opts)
-    children_ast = call(children, env, opts)
-    line = row + Keyword.get(opts, :line, env.line)
+    line = row + Keyword.get(opts, :line, 0)
 
     assigns_list =
       case assigns_ast do
@@ -328,10 +342,14 @@ defmodule X.Compiler do
          is_atom(component_ast) &&
          Code.ensure_compiled?(component_ast) &&
          function_exported?(component_ast, :template_ast, 0) do
+      children_ast = children |> Ast.drop_whitespace() |> compile_tree(env, opts)
+
       quote line: line do
         unquote(transform_inline_component(component_ast, assigns_list, children_ast, line))
       end
     else
+      children_ast = call(children, env, opts)
+
       args_ast =
         case children do
           [] -> [assigns_ast]

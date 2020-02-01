@@ -26,3 +26,5 @@ bench/deps
 bench/_build
 
 .elixir_ls
+
+tmp

@@ -1,8 +1,9 @@
 defmodule X.Tokenizer do
   alias X.Ast
 
-  @whitespace ' \n\r\t'
-  @namechar '.-_:'
+  @whitespaces ' \n\r\t'
+  @attr_stop_chars @whitespaces ++ '/>'
+  @namechars '.-_:'
 
   @singleton_tags ~w[
     area base br col embed hr
@@ -10,13 +11,13 @@ defmodule X.Tokenizer do
     param source track wbr
   ]c
 
-  defguard is_whitespace(char) when char in @whitespace
+  defguard is_whitespace(char) when char in @whitespaces
   defguard is_capital(char) when char >= ?A and char <= ?Z
   defguard is_lowercase(char) when char >= ?a and char <= ?z
   defguard is_letter(char) when is_capital(char) or is_lowercase(char)
   defguard is_digit(char) when char >= ?0 and char <= ?9
   defguard is_literal(char) when is_letter(char) or is_digit(char)
-  defguard is_namechar(char) when is_literal(char) or char in @namechar
+  defguard is_namechar(char) when is_literal(char) or char in @namechars
 
   @spec call(charlist() | String.t()) :: [Ast.token()]
   def call(html) when is_list(html) do
@@ -57,7 +58,7 @@ defmodule X.Tokenizer do
   end
 
   defp tokenize('<!' ++ tail, {col, row}) do
-    {data, list, cur} = extract_value(tail, {col + 2, row}, '>', false)
+    {data, list, cur} = extract_value(tail, {col + 2, row}, '>', nil, false)
 
     token = {:tag_comment, {col, row}, data}
 
@@ -163,6 +164,10 @@ defmodule X.Tokenizer do
     end
   end
 
+  defp extract_name([], cur) do
+    throw({:unexpected_token, cur, ?\s})
+  end
+
   @spec extract_tag_attributes(
           charlist(),
           Ast.cursor()
@@ -176,7 +181,7 @@ defmodule X.Tokenizer do
       [char | _] when char in '/>' ->
         {[], nil, nil, list, cur}
 
-      'x-elseif' ++ tail ->
+      'x-else-if' ++ tail ->
         cur = {col + 8, row}
         {value, list, cur} = extract_attr_value(tail, cur)
         {acc, _, iterator, rest, cur} = extract_tag_attributes(list, cur)
@@ -237,22 +242,19 @@ defmodule X.Tokenizer do
   defp extract_attr_value(list, {col, row}) do
     case list do
       '=%{' ++ rest ->
-        extract_value([?%, ?{ | rest], {col + 3, row}, '}', true)
+        extract_value([?%, ?{ | rest], {col + 3, row}, '}', ?{, true)
 
       [?=, ?' | rest] ->
-        extract_value(rest, {col + 2, row}, [?'], false)
+        extract_value(rest, {col + 2, row}, [?'], nil, false)
 
       '="' ++ rest ->
-        extract_value(rest, {col + 2, row}, '"', false)
+        extract_value(rest, {col + 2, row}, '"', nil, false)
 
       '=[' ++ rest ->
-        extract_value([?[ | rest], {col + 2, row}, ']', true)
-
-      '={' ++ rest ->
-        extract_value([?{ | rest], {col + 2, row}, '}', true)
+        extract_value([?[ | rest], {col + 2, row}, ']', ?[, true)
 
       [?=, next | rest] when is_literal(next) ->
-        extract_value([next | rest], {col + 1, row}, @whitespace, false)
+        extract_value([next | rest], {col + 1, row}, @attr_stop_chars, nil, false)
 
       [char | _] when is_whitespace(char) or char in '/>' ->
         {[], list, {col, row}}
@@ -262,20 +264,48 @@ defmodule X.Tokenizer do
     end
   end
 
-  @spec extract_value(charlist(), Ast.cursor(), charlist(), boolean()) ::
+  @spec extract_value(charlist(), Ast.cursor(), charlist(), nil | integer(), boolean()) ::
           {charlist(), charlist(), Ast.cursor()}
-  defp extract_value([char | rest], {col, row}, terminator, include_terminator) do
+  @spec extract_value(charlist(), Ast.cursor(), charlist(), nil | integer(), boolean(), integer()) ::
+          {charlist(), charlist(), Ast.cursor()}
+  defp extract_value(list, cur, terminator, continue_char, include_terminator, nesting \\ 0)
+
+  defp extract_value(
+         [char | rest],
+         {col, row},
+         terminator,
+         continue_char,
+         include_terminator,
+         nesting
+       ) do
     cur = next_cursor(char, {col, row})
 
     cond do
-      char not in terminator ->
-        {acc, rest, cur} = extract_value(rest, cur, terminator, include_terminator)
+      char == continue_char ->
+        {acc, rest, cur} =
+          extract_value(rest, cur, terminator, continue_char, include_terminator, nesting + 1)
+
+        {[char | acc], rest, cur}
+
+      char in terminator and (nesting == 1 or is_nil(continue_char)) ->
+        {(include_terminator && [char]) || [], rest, cur}
+
+      char in terminator ->
+        {acc, rest, cur} =
+          extract_value(rest, cur, terminator, continue_char, include_terminator, nesting - 1)
 
         {[char | acc], rest, cur}
 
       true ->
-        {(include_terminator && [char]) || [], rest, cur}
+        {acc, rest, cur} =
+          extract_value(rest, cur, terminator, continue_char, include_terminator, nesting)
+
+        {[char | acc], rest, cur}
     end
+  end
+
+  defp extract_value([], cur, _, _, _, _) do
+    throw({:unexpected_token, cur, ?\n})
   end
 
   @spec extract_tag_close(charlist(), Ast.cursor()) :: {boolean(), charlist(), Ast.cursor()}

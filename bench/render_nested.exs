@@ -142,7 +142,7 @@ benchmarks = %{
     XComponent.render(%{list: list})
   end,
   "X (string)" => fn ->
-    IO.iodata_to_binary(XComponent.render(%{list: list}))
+    XComponent.render_to_string(%{list: list})
   end,
   "Phoenix EEx (iodata)" => fn ->
     Phoenix.HTML.Safe.to_iodata(PhoenixBench.render(list))

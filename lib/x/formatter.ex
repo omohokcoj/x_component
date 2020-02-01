@@ -2,16 +2,21 @@ defmodule X.Formatter do
   alias X.Ast
   alias Inspect.Algebra, as: A
 
-  @type options() :: [{:nest, integer()}]
+  @type options() :: [
+          {:nest, integer()}
+          | {:width, non_neg_integer() | :infinity}
+        ]
 
   @script_tags ['script', 'style']
+
+  @default_line_length 80
 
   @spec call([Ast.leaf()], options()) :: iodata()
   def call(tree, options \\ []) do
     tree
     |> ast_to_doc()
     |> A.nest(Keyword.get(options, :nest, 0))
-    |> A.format(:infinity)
+    |> A.format(Keyword.get(options, :width, @default_line_length))
   end
 
   @spec ast_to_doc([Ast.leaf()]) :: A.t()
@@ -78,7 +83,7 @@ defmodule X.Formatter do
   end
 
   defp format({expr, _, value}) when expr in [:if, :elseif, :for, :unless] do
-    IO.iodata_to_binary(["x-", Atom.to_string(expr), '="', format_code(value), '"'])
+    A.concat(["x-", Atom.to_string(expr), "=\"", format_code(value), "\""])
   end
 
   defp format({:else, _, _}) do
@@ -86,7 +91,7 @@ defmodule X.Formatter do
   end
 
   defp format({{:tag_output, _, data, is_html_escape}, _}) do
-    IO.iodata_to_binary([
+    A.concat([
       "{{",
       if(is_html_escape, do: " ", else: "= "),
       format_code(data),
@@ -99,19 +104,23 @@ defmodule X.Formatter do
       case value do
         '%{' ++ _ -> ""
         [char | _] when char in '{[' -> ""
-        _ -> if(Enum.any?(value, &(&1 == ?")), do: "'", else: '"')
+        _ -> if(Enum.any?(value, &(&1 == ?")), do: "'", else: "\"")
       end
 
-    value = if(is_dynamic, do: format_code(value), else: value)
+    case value do
+      '' ->
+        to_string(name)
 
-    IO.iodata_to_binary([
-      if(is_dynamic, do: ":", else: ""),
-      name,
-      "=",
-      delimiter,
-      value,
-      delimiter
-    ])
+      _ ->
+        A.concat([
+          if(is_dynamic, do: ":", else: ""),
+          to_string(name),
+          "=",
+          delimiter,
+          if(is_dynamic, do: format_code(value), else: to_string(value)),
+          delimiter
+        ])
+    end
   end
 
   @spec format_tag_head(Ast.tag_start()) :: {A.t(), boolean()}
@@ -182,11 +191,11 @@ defmodule X.Formatter do
     ])
   end
 
-  @spec format_code(charlist()) :: iodata()
+  @spec format_code(charlist()) :: A.t()
   defp format_code(string) do
     string
     |> IO.iodata_to_binary()
-    |> Code.format_string!()
+    |> Code.Formatter.to_algebra!()
   end
 
   @spec sort_tag_attrs(Ast.tag_condition(), Ast.tag_iterator(), [Ast.tag_attr()]) :: [

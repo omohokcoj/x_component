@@ -88,7 +88,7 @@ benchmarks = %{
     XComponentBench.render(%{site_title: "Hello", list: list})
   end,
   "X (string)" => fn ->
-    IO.iodata_to_binary(XComponentBench.render(%{site_title: "Hello", list: list}))
+    XComponentBench.render_to_string(%{site_title: "Hello", list: list})
   end,
   "EEx (string)" => fn ->
     EExBench.eex("Hello", list)

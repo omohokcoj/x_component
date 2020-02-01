@@ -29,11 +29,11 @@ defmodule X.Html do
     end)
   end
 
-  @spec attrs_to_iodata(map() | [{atom() | String.t(), any()}]) :: iodata()
+  @spec attrs_to_iodata(map() | [{String.t(), any()}]) :: iodata()
   def attrs_to_iodata(attrs) when is_map(attrs) do
     attrs
     |> Map.to_list()
-    |> attr_value_to_iodata()
+    |> attrs_to_iodata()
   end
 
   def attrs_to_iodata([{_, value} | tail]) when value in [nil, false] do
@@ -41,13 +41,13 @@ defmodule X.Html do
   end
 
   def attrs_to_iodata([{key, value} | tail]) do
-    string_key = to_string(key)
-    value_iodata = attr_value_to_iodata(value, string_key)
-    attr_list = [to_safe_iodata(string_key), '="', value_iodata, '"']
+    value_iodata = attr_value_to_iodata(value, key)
+    attr_list = [key, '="', value_iodata, '"']
 
-    case tail do
-      [] -> [attr_list | attrs_to_iodata(tail)]
-      _ -> [attr_list, ?\s | attrs_to_iodata(tail)]
+    case {tail, attrs_to_iodata(tail)} do
+      {_, []} -> attr_list
+      {[], acc} -> [attr_list | acc]
+      {_, acc} -> [attr_list, ?\s | acc]
     end
   end
 
@@ -68,7 +68,7 @@ defmodule X.Html do
   end
 
   def attr_value_to_iodata(value, key) when is_map(value) or is_list(value) do
-    delimiter = if(key == "style", do: ";", else: " ")
+    delimiter = if(key == "style", do: "; ", else: " ")
 
     value
     |> Enum.to_list()
@@ -137,6 +137,10 @@ defmodule X.Html do
     |> value_to_key_list()
   end
 
+  defp value_to_key_list(value) when is_tuple(value) do
+    [{value, true}]
+  end
+
   defp value_to_key_list(value) do
     [{to_string(value), true}]
   end
@@ -159,9 +163,10 @@ defmodule X.Html do
           to_safe_iodata(key)
       end
 
-    case tail do
-      [] -> [result | join_values_to_iodata(tail, delimiter)]
-      _ -> [result, delimiter | join_values_to_iodata(tail, delimiter)]
+    case {tail, join_values_to_iodata(tail, delimiter)} do
+      {_, []} -> result
+      {[], acc} -> [result, acc]
+      {_, acc} -> [result, delimiter, acc]
     end
   end
 

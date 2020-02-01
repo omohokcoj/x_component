@@ -5,16 +5,22 @@ defmodule X.Template do
     end
   end
 
-  defmacro sigil_X(expr, opts) do
-    handle_sigil(expr, opts, __CALLER__)
+  defmacro sigil_X(expr, 's') do
+    quote do
+      IO.iodata_to_binary(unquote(handle_sigil(expr, __CALLER__)))
+    end
   end
 
-  @spec handle_sigil(Macro.t(), list(), Macro.Env.t()) :: Macro.t()
-  defp handle_sigil({:<<>>, _, [expr]}, [], env) do
-    X.compile_string!(expr, env)
+  defmacro sigil_X(expr, _) do
+    handle_sigil(expr, __CALLER__)
   end
 
-  defp handle_sigil(expr, [], env) when is_bitstring(expr) do
-    X.compile_string!(expr, env)
+  @spec handle_sigil(Macro.t(), Macro.Env.t()) :: Macro.t()
+  defp handle_sigil({:<<>>, _, [expr]}, env) do
+    X.compile_string!(expr, env, line: env.line)
+  end
+
+  defp handle_sigil(expr, env) when is_bitstring(expr) do
+    X.compile_string!(expr, env, line: env.line)
   end
 end

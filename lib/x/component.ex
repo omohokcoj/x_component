@@ -45,6 +45,7 @@ defmodule X.Component do
     end
   end
 
+  @doc false
   defmacro define_render_functions(template_ast, assigns_ast) do
     assigns_typespec = build_assigns_typespec(assigns_ast)
     {optional_vars_ast, required_vars_ast} = build_assigns_vars_ast(assigns_ast, __CALLER__)
@@ -110,20 +111,14 @@ defmodule X.Component do
   end
 
   @spec build_assigns_list(Macro.t()) :: [{name :: atom(), required :: boolean()}]
-  defp build_assigns_list(assigns_ast) do
-    case assigns_ast do
-      {:%{}, _, assigns} ->
-        Enum.map(assigns, fn
-          {{spec, _, [attr]}, _} ->
-            {attr, spec != :optional}
+  defp build_assigns_list({:%{}, _, assigns}) do
+    Enum.map(assigns, fn
+      {{spec, _, [attr]}, _} ->
+        {attr, spec != :optional}
 
-          {attr, _} ->
-            {attr, true}
-        end)
-
-      assigns ->
-        Enum.map(assigns, &{&1, true})
-    end
+      {attr, _} ->
+        {attr, true}
+    end)
   end
 
   @spec build_component_doc(String.t(), Macro.t()) :: String.t()

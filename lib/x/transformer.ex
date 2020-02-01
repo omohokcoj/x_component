@@ -35,7 +35,8 @@ defmodule X.Transformer do
       {variable, meta, nil} when is_atom(variable) ->
         {variable, meta, context}
 
-      ast = {function, _, args} when not is_nil(context) and is_atom(function) and is_list(args) ->
+      ast = {function, _, args}
+      when not is_nil(context) and is_atom(function) and is_list(args) ->
         alias_function(ast, env)
 
       a ->
@@ -50,28 +51,32 @@ defmodule X.Transformer do
       ast =
           {:case, _,
            [
-             {{{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, :attrs]},
-              base_attrs},
-             block_ast
+             {:{}, _,
+              [
+                {{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, :attrs]},
+                base_attrs,
+                static_attrs
+              ]},
+             _
            ]} ->
         case Keyword.get(assigns, :attrs) do
           nil ->
-            transform_inline_attributes([], base_attrs, block_ast, line)
+            transform_inline_attributes([], base_attrs, static_attrs, line)
 
           attrs when is_list(attrs) ->
-            transform_inline_attributes(attrs, base_attrs, block_ast, line)
+            transform_inline_attributes(attrs, base_attrs, static_attrs, line)
 
           _ ->
             ast
         end
 
-      ast = {{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, variable]} ->
-        Keyword.get(assigns, variable, ast)
-
       ast ->
         ast
     end)
     |> Macro.postwalk(fn
+      ast = {{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, variable]} ->
+        Keyword.get(assigns, variable, ast)
+
       {:yield, _, _} ->
         children
 
@@ -100,60 +105,43 @@ defmodule X.Transformer do
     end)
   end
 
-  @spec transform_inline_attributes(Keyword.t(), Keyword.t(), Macro.t(), integer()) :: Macro.t()
-  defp transform_inline_attributes(attrs, base_attrs, block_ast, line) do
-    dynamic_values =
-      Enum.reduce(attrs ++ base_attrs, [], fn {key, value}, acc ->
-        case value do
-          {_, _, _} ->
-            [key | acc]
+  @spec transform_inline_attributes(list(), list(), list(), integer()) :: Macro.t()
+  defp transform_inline_attributes(attrs, base_attrs, static_attrs, line) do
+    attrs = X.Html.merge_attrs(X.Html.merge_attrs(base_attrs, static_attrs), attrs)
 
-          value when is_list(value) ->
-            is_dynamic = Enum.any?(value, &is_tuple(&1))
+    {dynamic_attrs, static_attrs} =
+      Enum.split_with(attrs, fn
+        {{_, _, _}, _} ->
+          true
 
-            if(is_dynamic, do: [key | acc], else: acc)
+        {_, value} ->
+          case value do
+            {_, _, _} ->
+              true
 
-          _ ->
-            acc
-        end
+            value when is_list(value) ->
+              Enum.any?(value, fn
+                {key, value} -> is_tuple(value) or is_tuple(key)
+                value -> is_tuple(value)
+              end)
+
+            _ ->
+              false
+          end
       end)
 
-    {attrs_dynamic, attrs_static} =
-      Enum.split_with(attrs, fn {key, _} -> key in dynamic_values end)
+    case dynamic_attrs do
+      [] ->
+        [?\s, X.Html.attrs_to_iodata(static_attrs)]
 
-    {base_dynamic, base_static} =
-      Enum.split_with(base_attrs, fn {key, _} -> key in dynamic_values end)
+      _ ->
+        dynamic_ast =
+          quote line: line do
+            X.Html.attrs_to_iodata(unquote(dynamic_attrs))
+          end
 
-    dynamic_ast =
-      case {attrs_dynamic, base_dynamic} do
-        {[], []} ->
-          []
-
-        {[], _} ->
-          [?\s, quote(line: line, do: X.Html.attrs_to_iodata(unquote(base_dynamic)))]
-
-        {_, []} ->
-          [?\s, quote(line: line, do: X.Html.attrs_to_iodata(unquote(attrs_dynamic)))]
-
-        {_, _} ->
-          [
-            ?\s,
-            quote line: line do
-              X.Html.attrs_to_iodata(
-                X.Html.merge_attrs(unquote(attrs_dynamic), unquote(base_dynamic))
-              )
-            end
-          ]
-      end
-
-    [_, {:->, _, [[{:_, _, _}], attrs_iodata]}] = Keyword.get(block_ast, :do)
-
-    [
-      ?\s,
-      X.Html.attrs_to_iodata(X.Html.merge_attrs(attrs_static, base_static)),
-      dynamic_ast,
-      attrs_iodata
-    ]
+        [?\s, dynamic_ast, X.Html.attrs_to_iodata(static_attrs)]
+    end
   end
 
   @spec alias_function(Macro.expr(), Macro.Env.t()) :: Macro.t()
@@ -184,6 +172,10 @@ defmodule X.Transformer do
   @spec join_binary(Macro.t(), list(), list()) :: Macro.t()
   defp join_binary(list, iodata \\ [], acc \\ [])
 
+  defp join_binary([ast = {_, _, _} | tail], [], acc) do
+    join_binary(tail, [], [ast | acc])
+  end
+
   defp join_binary([ast = {_, _, _} | tail], iodata, acc) do
     join_binary(tail, [], [ast, IO.iodata_to_binary(iodata) | acc])
   end
@@ -192,8 +184,16 @@ defmodule X.Transformer do
     join_binary(tail, [iodata, head], acc)
   end
 
+  defp join_binary([], [], []) do
+    []
+  end
+
   defp join_binary([], iodata, []) do
     IO.iodata_to_binary(iodata)
+  end
+
+  defp join_binary([], [], acc) do
+    :lists.reverse(acc)
   end
 
   defp join_binary([], iodata, acc) do
