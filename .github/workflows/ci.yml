@@ -1,0 +1,67 @@
+name: CI
+
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/cache@v1
+      with:
+        path: deps
+        key: dependencies-${{ hashFiles('mix.lock') }}
+    - name: Setup elixir
+      uses: actions/setup-elixir@v1
+      with:
+        elixir-version: 1.9.4
+        otp-version: 22.2
+    - name: Install Dependencies
+      run: mix deps.get
+    - name: Run Tests
+      run: mix coveralls.html
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1.0.0
+      with:
+       name: cover
+       path: ./cover
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/cache@v1
+      with:
+        path: deps
+        key: dependencies-${{ hashFiles('mix.lock') }}
+    - name: Setup elixir
+      uses: actions/setup-elixir@v1
+      with:
+        elixir-version: 1.9.4
+        otp-version: 22.2
+    - name: Install Dependencies
+      run: mix deps.get
+    - name: Run Format
+      run: mix format --check-formatted --dry-run
+
+  dialyzer:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/cache@v1
+      with:
+        path: deps
+        key: dependencies-${{ hashFiles('mix.lock') }}
+    - uses: actions/cache@v1
+      with:
+        path: _build
+        key: build-${{ hashFiles('mix.lock') }}
+    - name: Setup elixir
+      uses: actions/setup-elixir@v1
+      with:
+        elixir-version: 1.9.4
+        otp-version: 22.2
+    - name: Install Dependencies
+      run: mix deps.get
+    - name: Run Dialyzer
+      run: mix dialyzer
