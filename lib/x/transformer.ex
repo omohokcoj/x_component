@@ -1,4 +1,10 @@
 defmodule X.Transformer do
+  @moduledoc """
+  This module contains a set of functions to transform compiled Elixir AST
+  into more performance optimized AST.
+  Also, it contains functions to transform Elixir AST for inline components.
+  """
+
   @spec compact_ast(Macro.t()) :: Macro.t()
   def compact_ast(tree) when is_list(tree) do
     tree
@@ -10,6 +16,15 @@ defmodule X.Transformer do
     tree
   end
 
+  @doc """
+  Transform given Elixir AST into a valid X template AST.
+
+    * transforms globals `@var` into assigns `Map.get/2` function call.
+    * transforms `@assigns` and `@yield` into local variables.
+    * add given `context` module to the local variables context.
+    * transforms imported function call into function call from the imported module.
+    * expands all aliases.
+  """
   @spec transform_expresion(Macro.t(), atom(), Macro.Env.t()) :: Macro.t()
   def transform_expresion(ast, context, env) do
     Macro.postwalk(ast, fn
@@ -44,35 +59,16 @@ defmodule X.Transformer do
     end)
   end
 
+  @doc """
+  Transform given X template Elixir AST into optimized inline component AST.
+
+    * replaces dynamic `:attrs` with string build in compile time when it's possible.
+    * replaces local variables with given `assigns`.
+    * replaces `yield` local variables with given `children` AST.
+  """
   @spec transform_inline_component(atom(), Keyword.t(), Macro.t(), integer()) :: Macro.t()
   def transform_inline_component(module, assigns, children, line) do
     module.template_ast()
-    |> Macro.prewalk(fn
-      ast =
-          {:case, _,
-           [
-             {:{}, _,
-              [
-                {{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, :attrs]},
-                base_attrs,
-                static_attrs
-              ]},
-             _
-           ]} ->
-        case Keyword.get(assigns, :attrs) do
-          nil ->
-            transform_inline_attributes([], base_attrs, static_attrs, line)
-
-          attrs when is_list(attrs) ->
-            transform_inline_attributes(attrs, base_attrs, static_attrs, line)
-
-          _ ->
-            ast
-        end
-
-      ast ->
-        ast
-    end)
     |> Macro.postwalk(fn
       ast = {{:., _, [{:__aliases__, _, [:Map]}, :get]}, _, [{:assigns, _, _}, variable]} ->
         Keyword.get(assigns, variable, ast)
@@ -99,6 +95,17 @@ defmodule X.Transformer do
 
       {term, _meta, args} ->
         {term, [line: line], args}
+
+      ast ->
+        ast
+    end)
+    |> Macro.prewalk(fn
+      ast = {:case, _, [{:{}, _, [attrs, base_attrs, static_attrs]}, _]} ->
+        if is_list(attrs) || is_nil(attrs) do
+          transform_inline_attributes(attrs || [], base_attrs, static_attrs, line)
+        else
+          ast
+        end
 
       ast ->
         ast
@@ -140,7 +147,7 @@ defmodule X.Transformer do
             X.Html.attrs_to_iodata(unquote(dynamic_attrs))
           end
 
-        [?\s, dynamic_ast, X.Html.attrs_to_iodata(static_attrs)]
+        [?\s, dynamic_ast, ?\s, X.Html.attrs_to_iodata(static_attrs)]
     end
   end
 

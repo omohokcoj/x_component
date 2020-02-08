@@ -1,5 +1,6 @@
 defmodule X.FormatterTest do
   use ExUnit.Case
+  doctest X.Formatter
 
   defmacro sigil_F({:<<>>, _, [expr]}, _opts) do
     "\n" <> String.trim_trailing(expr)
@@ -11,7 +12,6 @@ defmodule X.FormatterTest do
       |> X.Tokenizer.call()
       |> X.Parser.call()
       |> X.Formatter.call()
-      |> IO.iodata_to_binary()
     end
   end
 

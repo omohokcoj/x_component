@@ -1,4 +1,8 @@
 defmodule X.Html do
+  @moduledoc """
+  This module contains a set of functions to build a valid and safe HTML from X templates.
+  """
+
   @escape_chars [
     {?<, "&lt;"},
     {?>, "&gt;"},
@@ -9,6 +13,21 @@ defmodule X.Html do
 
   @merge_attr_names ["class", "style"]
 
+  @doc ~S"""
+  Merges given attrs and returns a list with key-value tuples:
+
+      iex> X.Html.merge_attrs(%{demo: true, env: "test"}, [demo: false])
+      [{"env", "test"}, {"demo", false}]
+
+  It doesn't override `"style"` and `"class"` attributes from `base_attrs`
+  but adds merged values into the list:
+
+      iex> X.Html.merge_attrs(
+      ...>   %{style: [{"color", "#fff"}, {"size", 1}]},
+      ...>   [style: [{"color", "#aaa"}, {"font", "test"}]]
+      ...> )
+      [{"style", [{"size", 1}, {"color", "#aaa"}, {"font", "test"}]}]
+  """
   @spec merge_attrs(any(), any()) :: [{String.t(), any()}]
   def merge_attrs(base_attrs, merge_attrs) do
     merge_attrs = value_to_key_list(merge_attrs)
@@ -29,6 +48,12 @@ defmodule X.Html do
     end)
   end
 
+  @doc ~S"""
+  Converts given attrs into HTML-safe iodata:
+
+      iex> X.Html.attrs_to_iodata(%{"demo" => true, "env" => "<test>"})
+      [["demo", '="', "true", '"'], 32, "env", '="', [[[] | "&lt;"], "test" | "&gt;"], '"']
+  """
   @spec attrs_to_iodata(map() | [{String.t(), any()}]) :: iodata()
   def attrs_to_iodata(attrs) when is_map(attrs) do
     attrs
@@ -55,6 +80,17 @@ defmodule X.Html do
     []
   end
 
+  @doc ~S"""
+  Converts attr value into HTML-safe iodata:
+
+      iex> X.Html.attr_value_to_iodata("<test>")
+      [[[] | "&lt;"], "test" | "&gt;"]
+
+  `"style"` and `"class"` attr values are joined with a delimiter:
+
+      iex> X.Html.attr_value_to_iodata([{"color", "#fff"}, {"font", "small"}], "style")
+      [["color", ": ", "#fff"], "; ", ["font", ": ", "small"]]
+  """
   @spec attr_value_to_iodata(any()) :: iodata()
   @spec attr_value_to_iodata(any(), String.t()) :: iodata()
   def attr_value_to_iodata(value, key \\ "")
@@ -79,6 +115,12 @@ defmodule X.Html do
     to_safe_iodata(value)
   end
 
+  @doc ~S"""
+  Converts given value into HTML-safe iodata:
+
+      iex> X.Html.to_safe_iodata("<test>")
+      [[[] | "&lt;"], "test" | "&gt;"]
+  """
   @spec to_safe_iodata(any()) :: iodata()
   def to_safe_iodata(value) when is_binary(value) do
     escape_to_iodata(value, 0, value, [])

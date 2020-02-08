@@ -9,4 +9,6 @@ config :x_component,
     use X.Template
   """
 
-config :phoenix, :json_library, Jason
+if Mix.env() == :test do
+  config :phoenix, :json_library, Jason
+end

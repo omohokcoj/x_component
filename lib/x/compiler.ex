@@ -1,4 +1,6 @@
 defmodule X.Compiler do
+  @moduledoc false
+
   alias X.Ast
 
   import X.Transformer,
@@ -21,6 +23,32 @@ defmodule X.Compiler do
           | {:line, integer()}
         ]
 
+  @doc ~S"""
+  Compiles given X template AST into Elixir AST.
+
+  ## Example
+
+      iex> X.Compiler.call(
+      ...> [
+      ...>   {{:tag_start, {1, 1}, 'div', [], nil, nil, false, false, false},
+      ...>    [
+      ...>      {{:tag_start, {6, 1}, 'span',
+      ...>        [{:tag_attr, {12, 1}, 'class', 'test', false}], nil, nil, false, false,
+      ...>        false},
+      ...>       [
+      ...>         {{:text_group, {25, 1}, 'span'},
+      ...>          [{{:tag_output, {25, 1}, 'a ', true}, []}]}
+      ...>       ]}
+      ...>    ]}
+      ...> ])
+      [
+        "<div><span class=\"test\">",
+        {{:., [line: 1],
+          [{:__aliases__, [line: 1, alias: false], [:X, :Html]}, :to_safe_iodata]},
+         [line: 1], [{:a, [line: 1], nil}]},
+        "</span></div>"
+      ]
+  """
   @spec call([Ast.leaf()]) :: Macro.t()
   @spec call([Ast.leaf()], Macro.Env.t()) :: Macro.t()
   @spec call([Ast.leaf()], Macro.Env.t(), options()) :: Macro.t()

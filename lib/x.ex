@@ -1,4 +1,59 @@
 defmodule X do
+  @moduledoc """
+  Component-based HTML templates for Elixir/Phoenix, inspired by Vue.
+  Zero-dependency. Framework/library agnostic. Optimized for Phoenix and Gettext.
+
+  ## Features
+
+    * Declarative HTML template syntax close to Vue.
+    * Compile time errors and warnings.
+    * Type checks with dialyzer specs.
+    * Template code formatter.
+    * Inline, context-aware components.
+    * Smart attributes merge.
+    * Decorator components.
+    * Fast compilation and rendering.
+    * Optimized for Gettext/Phoenix/ElixirLS.
+    * Component scaffolds generator task.
+
+  ## Template Syntax
+
+  See more examples [here](https://github.com/omohokcoj/x_component/tree/master/examples/lib).
+
+      ~X"\""
+      <body>
+        <!-- Body -->
+        <div class="container">
+          <Breadcrumbs
+            :crumbs=[
+              %{to: :root, params: [], title: "Home", active: false},
+              %{to: :form, params: [], title: "Form", active: true}
+            ]
+            data-breadcrumbs
+          />
+          <Form :action='"/book/" <> to_string(book.id)'>
+            {{ @message }}
+            <FormInput
+              :label='"Title"'
+              :name=":title"
+              :record="book"
+            />
+            <FormInput
+              :name=":body"
+              :record="book"
+              :type=":textarea"
+            />
+            <RadioGroup
+              :name=":type"
+              :options=["fiction", "bussines", "tech"]
+              :record="book"
+            />
+          </Form>
+        </div>
+      </body>
+      "\""
+  """
+
   @format_sigil_regexp ~r/(\n[^\n]*?~X\""")\n+(.*?)\"""/s
 
   @doc ~S"""
@@ -8,11 +63,12 @@ defmodule X do
     * `:line` - the line to be used as the template start.
     * `:context` - compile all variables in given context.
       Variables are not context aware when `nil`.
-    * `:inline` - inserts nested components AST into parent component when `true`.
-      When `false` nested components will be rendered with `render/2` function.
+    * `:inline` - inserts nested component AST into parent component when `true`.
+      When `false` nested components will be rendered via embed `render/2` functions.
       Templates compiled with `inline` have better performance.
 
-  ## Examples
+  ## Example
+
       iex> X.compile_string!("<span>Hello {{= example + 1 }} </span>")
       [
         "<span>Hello ",
@@ -43,7 +99,8 @@ defmodule X do
   @doc """
   Formats given component file string.
 
-  ## Examples
+  ## Example
+
       iex> X.format_file!("\""
       ...> defmodule Example do
       ...>   use X.Component,
@@ -81,13 +138,12 @@ defmodule X do
   @doc ~S"""
   Formats given template string. Returns iodata.
 
-  ## Examples
-      iex> X.format_string!("<span><span/>Hello {{= example + 1 }} </span>")
-      ["\n", "<", "span", ">", "\n  ", "<", "span", " />", "Hello ",
-        "{{", "= ", "example", " +", " ", "1", " }}", " ", "\n", "</", "span", ">"]
+  ## Example
 
+      iex> X.format_string!("<span><span/>Hello {{= example + 1 }} </span>")
+      "\n<span>\n  <span />Hello {{= example + 1 }} \n</span>"
   """
-  @spec format_string!(String.t(), X.Formatter.options()) :: iodata()
+  @spec format_string!(String.t(), X.Formatter.options()) :: String.t()
   def format_string!(source, options \\ []) when is_binary(source) and is_list(options) do
     source
     |> X.Tokenizer.call()

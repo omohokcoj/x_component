@@ -20,13 +20,14 @@ defmodule XComponent do
   def render_inline(%{link: link}) do
     unquote(
       X.compile_string!(
-        Enum.map((1..200), fn _ ->
+        Enum.map(1..200, fn _ ->
           """
           <Button :href="link" class="btn-primary">
             Submit
           </Button>
           """
-        end) |> IO.iodata_to_binary(),
+        end)
+        |> IO.iodata_to_binary(),
         __ENV__,
         inline: true
       )
@@ -36,13 +37,14 @@ defmodule XComponent do
   def render(%{link: link}) do
     unquote(
       X.compile_string!(
-        Enum.map((1..200), fn _ ->
+        Enum.map(1..200, fn _ ->
           """
           <Button :href="link" class="btn-primary">
             Submit
           </Button>
           """
-        end) |> IO.iodata_to_binary(),
+        end)
+        |> IO.iodata_to_binary(),
         __ENV__,
         inline: false
       )
@@ -68,11 +70,12 @@ defmodule PhoenixBench do
   EEx.function_from_string(
     :def,
     :render,
-    Enum.map((1..200), fn _ ->
+    Enum.map(1..200, fn _ ->
       """
       <%= button(link, "btn-primary", "Hello") %>
       """
-    end) |> IO.iodata_to_binary(),
+    end)
+    |> IO.iodata_to_binary(),
     [:link],
     engine: Phoenix.HTML.Engine
   )

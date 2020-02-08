@@ -1,5 +1,6 @@
 defmodule X.TokenizerTest do
   use ExUnit.Case
+  doctest X.Tokenizer
 
   alias X.Tokenizer
 

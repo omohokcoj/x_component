@@ -13,74 +13,74 @@ Erlang 22.1.4
 
 ```
 Name                                ips        average  deviation         median         99th %
-Floki/Mochi (html parser)        392.71        2.55 ms    ±11.62%        2.45 ms        3.63 ms
-X (parser)                       381.84        2.62 ms    ±17.63%        2.43 ms        4.11 ms
-EEx (html)                       349.64        2.86 ms    ±15.52%        2.70 ms        4.32 ms
-X (compiler)                     167.53        5.97 ms    ±10.33%        6.12 ms        7.76 ms
-Calliope (haml)                   20.74       48.21 ms     ±9.94%       47.57 ms       60.01 ms
-Slime (slim)                       2.28      438.06 ms    ±15.21%      410.57 ms      607.55 ms
-Expug (pug)                      0.0842    11873.28 ms     ±0.00%    11873.28 ms    11873.28 ms
+Floki/Mochi (html parser)        385.79        2.59 ms    ±16.85%        2.46 ms        4.24 ms
+X (parser)                       357.78        2.80 ms    ±22.56%        2.60 ms        5.08 ms
+EEx (html)                       314.95        3.18 ms    ±21.56%        3.10 ms        5.60 ms
+X (compiler)                     152.93        6.54 ms    ±15.52%        6.44 ms        9.80 ms
+Calliope (haml)                   23.83       41.97 ms     ±4.77%       41.47 ms       48.87 ms
+Slime (slim)                       2.27      441.24 ms    ±14.87%      413.43 ms      582.09 ms
+Expug (pug)                      0.0836    11962.34 ms     ±0.00%    11962.34 ms    11962.34 ms
 
 Comparison:
-Floki/Mochi (html parser)        392.71
-X (parser)                       381.84 - 1.03x slower +0.0725 ms
-EEx (html)                       349.64 - 1.12x slower +0.31 ms
-X (compiler)                     167.53 - 2.34x slower +3.42 ms
-Calliope (haml)                   20.74 - 18.93x slower +45.67 ms
-Slime (slim)                       2.28 - 172.03x slower +435.51 ms
-Expug (pug)                      0.0842 - 4662.76x slower +11870.73 ms
+Floki/Mochi (html parser)        385.79
+X (parser)                       357.78 - 1.08x slower +0.20 ms
+EEx (html)                       314.95 - 1.22x slower +0.58 ms
+X (compiler)                     152.93 - 2.52x slower +3.95 ms
+Calliope (haml)                   23.83 - 16.19x slower +39.37 ms
+Slime (slim)                       2.27 - 170.23x slower +438.65 ms
+Expug (pug)                      0.0836 - 4614.95x slower +11959.75 ms
 ```
 
 ### Rendering list:
 
 ```
 Name                           ips        average  deviation         median         99th %
-X (iodata)                  1.49 K      668.91 μs    ±15.19%      639.90 μs     1129.82 μs
-X (string)                  1.31 K      762.65 μs    ±13.15%      730.90 μs     1271.20 μs
-Phoenix EEx (iodata)        1.04 K      957.73 μs    ±30.40%      892.90 μs     2013.72 μs
-Phoenix EEx (string)        0.94 K     1061.82 μs    ±27.92%      991.90 μs     2181.32 μs
-EEx (string)                0.71 K     1410.01 μs    ±17.44%     1324.90 μs     2421.37 μs
+X (iodata)                  1.13 K      887.73 μs    ±31.50%      819.90 μs     1895.73 μs
+Phoenix EEx (iodata)        1.04 K      962.62 μs    ±30.42%      895.90 μs     1956.00 μs
+X (string)                  1.01 K      991.42 μs    ±29.17%      915.90 μs     2040.98 μs
+Phoenix EEx (string)        0.95 K     1047.88 μs    ±27.30%      979.90 μs     2068.21 μs
+EEx (string)                0.69 K     1443.95 μs    ±19.18%     1353.90 μs     2451.34 μs
 
 Comparison:
-X (iodata)                  1.49 K
-X (string)                  1.31 K - 1.14x slower +93.74 μs
-Phoenix EEx (iodata)        1.04 K - 1.43x slower +288.82 μs
-Phoenix EEx (string)        0.94 K - 1.59x slower +392.91 μs
-EEx (string)                0.71 K - 2.11x slower +741.10 μs
+X (iodata)                  1.13 K
+Phoenix EEx (iodata)        1.04 K - 1.08x slower +74.88 μs
+X (string)                  1.01 K - 1.12x slower +103.68 μs
+Phoenix EEx (string)        0.95 K - 1.18x slower +160.15 μs
+EEx (string)                0.69 K - 1.63x slower +556.22 μs
 ```
 
 ### Rendering nested:
 
 ```
 Name                           ips        average  deviation         median         99th %
-X (iodata)                    8.71      114.76 ms    ±10.96%      113.07 ms      158.93 ms
-X (string)                    6.43      155.51 ms    ±12.95%      148.41 ms      214.75 ms
-Phoenix EEx (iodata)          6.25      160.12 ms    ±17.66%      153.37 ms      249.08 ms
-Phoenix EEx (string)          4.32      231.63 ms    ±17.09%      215.29 ms      327.41 ms
+X (iodata)                    7.11      140.66 ms    ±11.74%      137.84 ms      192.84 ms
+Phoenix EEx (iodata)          6.19      161.49 ms    ±17.79%      154.52 ms      265.19 ms
+X (string)                    4.65      215.19 ms    ±13.17%      217.22 ms      292.51 ms
+Phoenix EEx (string)          4.29      233.20 ms    ±16.37%      212.74 ms      323.82 ms
 
 Comparison:
-X (iodata)                    8.71
-X (string)                    6.43 - 1.36x slower +40.76 ms
-Phoenix EEx (iodata)          6.25 - 1.40x slower +45.36 ms
-Phoenix EEx (string)          4.32 - 2.02x slower +116.87 ms
+X (iodata)                    7.11
+Phoenix EEx (iodata)          6.19 - 1.15x slower +20.83 ms
+X (string)                    4.65 - 1.53x slower +74.54 ms
+Phoenix EEx (string)          4.29 - 1.66x slower +92.55 ms
 ```
 
 ### Rendering inline:
 
 ```
 Name                           ips        average  deviation         median         99th %
-X inline (iodata)          13.48 K       74.19 μs    ±18.28%       71.90 μs      137.90 μs
-X inline (string)           9.18 K      108.93 μs    ±24.44%      105.90 μs      208.90 μs
-Phoenix EEx (iodata)        7.51 K      133.19 μs    ±64.53%      125.90 μs      233.90 μs
-Phoenix EEx (string)        6.20 K      161.31 μs    ±17.02%      154.90 μs      275.49 μs
-X function (iodata)         2.62 K      380.97 μs    ±18.36%      355.90 μs      647.51 μs
-X function (string)         2.25 K      444.03 μs    ±16.29%      417.90 μs      728.80 μs
+X inline (iodata)          20.38 K       49.06 μs    ±17.15%          47 μs          93 μs
+X inline (string)          14.48 K       69.05 μs    ±20.50%          66 μs      134.53 μs
+Phoenix EEx (iodata)        7.52 K      133.05 μs    ±15.62%         129 μs         228 μs
+Phoenix EEx (string)        6.43 K      155.45 μs    ±13.31%         149 μs         249 μs
+X function (iodata)         3.33 K      300.67 μs    ±14.48%         283 μs      487.91 μs
+X function (string)         2.79 K      358.93 μs    ±11.44%         343 μs         544 μs
 
 Comparison:
-X inline (iodata)          13.48 K
-X inline (string)           9.18 K - 1.47x slower +34.73 μs
-Phoenix EEx (iodata)        7.51 K - 1.80x slower +58.99 μs
-Phoenix EEx (string)        6.20 K - 2.17x slower +87.11 μs
-X function (iodata)         2.62 K - 5.13x slower +306.78 μs
-X function (string)         2.25 K - 5.98x slower +369.84 μs
+X inline (iodata)          20.38 K
+X inline (string)          14.48 K - 1.41x slower +19.99 μs
+Phoenix EEx (iodata)        7.52 K - 2.71x slower +83.99 μs
+Phoenix EEx (string)        6.43 K - 3.17x slower +106.39 μs
+X function (iodata)         3.33 K - 6.13x slower +251.60 μs
+X function (string)         2.79 K - 7.32x slower +309.86 μs
 ```

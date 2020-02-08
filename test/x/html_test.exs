@@ -1,5 +1,6 @@
 defmodule X.HtmlTest do
   use ExUnit.Case
+  doctest X.Html
 
   alias X.Html
 

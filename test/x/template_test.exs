@@ -1,5 +1,6 @@
 defmodule X.TemplateTest do
   use ExUnit.Case
+  doctest X.Template
 
   use X.Template
 

@@ -43,27 +43,22 @@ defmodule XComponent do
         {{ a }}
       </Button>
       <Text :message="a" />
-
       <Button :href="a">
         {{ a }}
       </Button>
       <Text :message="a" />
-
       <Button :href="a">
         {{ a }}
       </Button>
       <Text :message="a" />
-
       <Button :href="a">
         {{ a }}
       </Button>
       <Text :message="a" />
-
       <Button :href="a">
         {{ a }}
       </Button>
       <Text :message="a" />
-
       <Button :href="a">
         {{ a }}
       </Button>

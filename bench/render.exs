@@ -81,7 +81,7 @@ defmodule PhoenixBench do
   )
 end
 
-list = Enum.map(1..1000, & to_string(&1))
+list = Enum.map(1..1000, &to_string(&1))
 
 benchmarks = %{
   "X (iodata)" => fn ->

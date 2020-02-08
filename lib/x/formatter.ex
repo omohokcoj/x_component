@@ -1,4 +1,6 @@
 defmodule X.Formatter do
+  @moduledoc false
+
   alias X.Ast
   alias Inspect.Algebra, as: A
 
@@ -11,12 +13,40 @@ defmodule X.Formatter do
 
   @default_line_length 80
 
-  @spec call([Ast.leaf()], options()) :: iodata()
+  @doc ~S"""
+  Formats given X template AST and returns template string.
+
+  Options:
+    * `:nest` - adds N leading whitespaces to every line of the formatted template.
+      0 by default.
+
+  ## Example
+
+      iex> X.Formatter.call(
+      ...> [
+      ...>   {{:tag_start, {1, 1}, 'div', [], nil, nil, false, false, false},
+      ...>    [
+      ...>      {{:tag_start, {6, 1}, 'span',
+      ...>        [{:tag_attr, {12, 1}, 'class', 'test', false}], nil, nil, false, false,
+      ...>        false},
+      ...>       [
+      ...>         {{:text_group, {25, 1}, 'span'},
+      ...>          [{{:tag_output, {25, 1}, 'a ', true}, []}]}
+      ...>       ]}
+      ...>    ]}
+      ...> ])
+      ~s(
+      <div>
+        <span class="test">{{ a }}</span>
+      </div>)
+  """
+  @spec call([Ast.leaf()], options()) :: String.t()
   def call(tree, options \\ []) do
     tree
     |> ast_to_doc()
     |> A.nest(Keyword.get(options, :nest, 0))
     |> A.format(Keyword.get(options, :width, @default_line_length))
+    |> IO.iodata_to_binary()
   end
 
   @spec ast_to_doc([Ast.leaf()]) :: A.t()
@@ -82,8 +112,12 @@ defmodule X.Formatter do
     A.concat([A.line(), "<!", :unicode.characters_to_binary(text), ">"])
   end
 
-  defp format({expr, _, value}) when expr in [:if, :elseif, :for, :unless] do
+  defp format({expr, _, value}) when expr in [:if, :for, :unless] do
     A.concat(["x-", Atom.to_string(expr), "=\"", format_code(value), "\""])
+  end
+
+  defp format({:elseif, _, value}) do
+    A.concat(["x-else-if", "=\"", format_code(value), "\""])
   end
 
   defp format({:else, _, _}) do

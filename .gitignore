@@ -25,6 +25,9 @@ x_components-*.tar
 bench/deps
 bench/_build
 
+examples/deps
+examples/_build
+
 .elixir_ls
 
 tmp

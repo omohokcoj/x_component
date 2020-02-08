@@ -1,5 +1,6 @@
 defmodule X.ParserTest do
   use ExUnit.Case
+  doctest X.Parser
 
   alias X.{Tokenizer, Parser}
 

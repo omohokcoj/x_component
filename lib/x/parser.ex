@@ -1,8 +1,36 @@
 defmodule X.Parser do
+  @moduledoc false
+
   alias X.Ast
 
   defguard is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
 
+  @doc ~S"""
+  Converts given tokens into X template AST.
+
+  ## Example
+
+      iex> X.Parser.call([
+      ...> {:tag_start, {1, 1}, 'div', [], nil, nil, false, false, false},
+      ...> {:tag_start, {6, 1}, 'span', [{:tag_attr, {12, 1}, 'class', 'test', false}],
+      ...> nil, nil, false, false, false},
+      ...> {:tag_output, {25, 1}, 'a ', true},
+      ...> {:tag_end, {32, 1}, 'span'},
+      ...> {:tag_end, {39, 1}, 'div'}
+      ...> ])
+      [
+        {{:tag_start, {1, 1}, 'div', [], nil, nil, false, false, false},
+         [
+           {{:tag_start, {6, 1}, 'span',
+             [{:tag_attr, {12, 1}, 'class', 'test', false}], nil, nil, false, false,
+             false},
+            [
+              {{:text_group, {25, 1}, 'span'},
+               [{{:tag_output, {25, 1}, 'a ', true}, []}]}
+            ]}
+         ]}
+      ]
+  """
   @spec call([Ast.token()]) :: [Ast.leaf()]
   def call(tokens) do
     {result, _} = parse(tokens, nil, [])

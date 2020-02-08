@@ -1,4 +1,8 @@
 defmodule X.Ast do
+  @moduledoc """
+  This module contains X template AST types definitions and functions to work with the AST.
+  """
+
   @type cursor() :: {
           column :: integer(),
           row :: integer()
@@ -82,6 +86,9 @@ defmodule X.Ast do
           children :: [leaf()]
         }
 
+  @doc """
+  Removes tailing and leading whitespace nodes from the given AST.
+  """
   @spec drop_whitespace([leaf()]) :: [leaf()]
   def drop_whitespace(tree) do
     tree

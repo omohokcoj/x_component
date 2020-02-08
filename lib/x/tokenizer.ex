@@ -1,4 +1,6 @@
 defmodule X.Tokenizer do
+  @moduledoc false
+
   alias X.Ast
 
   @whitespaces ' \n\r\t'
@@ -19,6 +21,22 @@ defmodule X.Tokenizer do
   defguard is_literal(char) when is_letter(char) or is_digit(char)
   defguard is_namechar(char) when is_literal(char) or char in @namechars
 
+  @doc ~S"""
+  Parses given string or charlist into X template tokens.
+  See `X.Ast` for tokens type definition.
+
+  ## Example
+
+      iex> X.Tokenizer.call("<div><span class='test'>{{ a }}</span></div>")
+      [
+        {:tag_start, {1, 1}, 'div', [], nil, nil, false, false, false},
+        {:tag_start, {6, 1}, 'span', [{:tag_attr, {12, 1}, 'class', 'test', false}],
+         nil, nil, false, false, false},
+        {:tag_output, {25, 1}, 'a ', true},
+        {:tag_end, {32, 1}, 'span'},
+        {:tag_end, {39, 1}, 'div'}
+      ]
+  """
   @spec call(charlist() | String.t()) :: [Ast.token()]
   def call(html) when is_list(html) do
     tokenize(html, {1, 1})

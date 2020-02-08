@@ -1,4 +1,62 @@
 defmodule X.Component do
+  @moduledoc ~S"""
+  Used to extent a module with the X component functions:
+
+  ## Example
+
+      defmodule ExampleComponent do
+        use X.Component,
+          assigns: %{
+            :message => String.t()
+          },
+          template: ~X"\""
+          <div>
+            {{ message }}
+            {{= yield }}
+          </div>
+          "\""
+      end
+
+    * `:assigns` - list of component assigned variables. Types can be defined with Elixir typespecs:
+
+      use X.Component,
+        assigns: %{
+          :book => any(),
+          :message => String.t(),
+          :items => [{atom(), String.t(), boolean()}],
+          optional(:active) => nil | boolean()
+        }
+
+    * `:template` - component X template.
+
+  ## Component functions:
+
+    * `render/1`, `render/2` - renders component as `iodata`. Render function can accept nested `iodata` elements:
+
+      ExampleComponent.render(%{message: "Example"}) do
+        [
+        ~X"\""
+        <form action="/test">
+          <input name="title">
+        </form>
+        "\"",
+        Button.render(%{test: "Submit"})
+        ]
+      end
+
+    * `render_to_string/1`, `render_to_string/2` - renders component to `bitstring`.
+
+    * `assigns/0` - returns a list of assigns with tuples where the first element is for the assign `atom` name and the second element is for required (`true`) and optional (`false`) assigns.
+
+      ExampleComponent.assigns()
+      # [message: true]
+
+    * `template/0` - returns X template string.
+
+      ExampleComponent.template()
+      # "<div>\n  {{ message }}\n  {{= yield }}\n</div>\n"
+  """
+
   @type options() :: [
           {:assigns, map() | [atom()]}
           | {:template, Macro.t()}

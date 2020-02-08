@@ -88,9 +88,10 @@ defmodule X.CompilerTest do
       assert ast ==
                [
                  "<span><div ",
-                 {{:., [line: 1], [{:__aliases__, [line: 1], [:X, :Html]}, :attrs_to_iodata]},
+                 {{:., [line: 1],
+                   [{:__aliases__, [line: 1, alias: false], [:X, :Html]}, :attrs_to_iodata]},
                   [line: 1], [[{"class", [{"btn", true}, {{:test, [line: 1], nil}, true}]}]]},
-                 "data=\"test\"> ",
+                 " data=\"test\"> ",
                  {{:., [line: 1], [{:__aliases__, [line: 1], [:X, :Html]}, :to_safe_iodata]},
                   [line: 1], [1]},
                  " </div></span>"
