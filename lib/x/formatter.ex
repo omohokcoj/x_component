@@ -1,5 +1,7 @@
 defmodule X.Formatter do
-  @moduledoc false
+  @moduledoc """
+  X template formatted module.
+  """
 
   alias X.Ast
   alias Inspect.Algebra, as: A

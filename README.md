@@ -3,7 +3,7 @@
 Component-based HTML templates for Elixir/Phoenix, inspired by Vue.<br/>
 Zero-dependency. Framework/library agnostic. Optimized for [Phoenix](#phoenix-integration) and Gettext.
 
-![x_component](examples/example.gif?raw=true)
+![x_component](https://raw.githubusercontent.com/omohokcoj/x_component/master/examples/example.gif)
 
 ## Installation
 
@@ -333,13 +333,13 @@ Formatter task uses settings from `.formatter.exs` by default.
 All project files can be formatted with:
 
 ```elixir
-mix x.formatter
+mix x.format
 ```
 
 Also, formatter task can be used to format a specific file:
 
 ```elixir
-mix x.formatter path/to/file.ex
+mix x.format path/to/file.ex
 ```
 
 ## Generator

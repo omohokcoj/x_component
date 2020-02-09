@@ -1,6 +1,6 @@
 defmodule X.Ast do
   @moduledoc """
-  This module contains X template AST types definitions and functions to work with the AST.
+  Contains X template AST type definitions and functions to work with the AST.
   """
 
   @type cursor() :: {

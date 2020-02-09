@@ -1,9 +1,11 @@
 defmodule X.Parser do
-  @moduledoc false
+  @moduledoc """
+  X template parser module.
+  """
 
   alias X.Ast
 
-  defguard is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
+  defguardp is_text_token(token) when elem(token, 0) in [:tag_text, :tag_output]
 
   @doc ~S"""
   Converts given tokens into X template AST.

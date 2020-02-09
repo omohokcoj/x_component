@@ -1,6 +1,6 @@
 defmodule X.Html do
   @moduledoc """
-  This module contains a set of functions to build a valid and safe HTML from X templates.
+  Contains a set of functions to build a valid and safe HTML from X templates.
   """
 
   @escape_chars [

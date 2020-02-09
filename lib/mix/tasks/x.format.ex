@@ -1,7 +1,19 @@
 defmodule Mix.Tasks.X.Format do
+  @shortdoc "Formats the given files/patterns"
+
+  @moduledoc """
+  Formatter task uses settings from `.formatter.exs` by default.
+  All project files can be formatted with:
+
+      mix x.format
+
+  Also, formatter task can be used to format a specific file:
+
+      mix x.format path/to/file.ex
+  """
+
   use Mix.Task
 
-  @shortdoc "Formats the given files/patterns"
   # https://github.com/elixir-lang/elixir/blob/master/lib/mix/lib/mix/tasks/format.ex
 
   @switches [

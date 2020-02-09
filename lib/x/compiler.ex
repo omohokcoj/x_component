@@ -1,5 +1,7 @@
 defmodule X.Compiler do
-  @moduledoc false
+  @moduledoc """
+  X template compiler module.
+  """
 
   alias X.Ast
 

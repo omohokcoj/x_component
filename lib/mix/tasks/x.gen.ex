@@ -1,7 +1,22 @@
 defmodule Mix.Tasks.X.Gen do
-  use Mix.Task
-
   @shortdoc "Generates component file"
+
+  @moduledoc ~S"""
+  New component files can be generated with:
+
+      mix x.gen Users.Show
+
+  Generator settings can be adjusted via `:x_component` application configs:
+
+      config :x_component,
+        root_path: "lib/app_web/components",
+        root_module: "AppWeb.Components",
+        generator_template: "\""
+          use X.Template
+        "\""
+  """
+
+  use Mix.Task
 
   @impl true
   def run(args) do

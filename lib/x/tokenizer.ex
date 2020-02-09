@@ -1,5 +1,7 @@
 defmodule X.Tokenizer do
-  @moduledoc false
+  @moduledoc """
+  X template tokenizer module.
+  """
 
   alias X.Ast
 
@@ -13,13 +15,13 @@ defmodule X.Tokenizer do
     param source track wbr
   ]c
 
-  defguard is_whitespace(char) when char in @whitespaces
-  defguard is_capital(char) when char >= ?A and char <= ?Z
-  defguard is_lowercase(char) when char >= ?a and char <= ?z
-  defguard is_letter(char) when is_capital(char) or is_lowercase(char)
-  defguard is_digit(char) when char >= ?0 and char <= ?9
-  defguard is_literal(char) when is_letter(char) or is_digit(char)
-  defguard is_namechar(char) when is_literal(char) or char in @namechars
+  defguardp is_whitespace(char) when char in @whitespaces
+  defguardp is_capital(char) when char >= ?A and char <= ?Z
+  defguardp is_lowercase(char) when char >= ?a and char <= ?z
+  defguardp is_letter(char) when is_capital(char) or is_lowercase(char)
+  defguardp is_digit(char) when char >= ?0 and char <= ?9
+  defguardp is_literal(char) when is_letter(char) or is_digit(char)
+  defguardp is_namechar(char) when is_literal(char) or char in @namechars
 
   @doc ~S"""
   Parses given string or charlist into X template tokens.

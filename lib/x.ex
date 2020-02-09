@@ -152,7 +152,7 @@ defmodule X do
   end
 
   @doc """
-  Json library that is used to serialize `map`.
+  Returns a json library module that is used to serialize `map`.
   By default it uses `Phoenix.json_library/1` when used with Phoenix.
   Json library can be set via application config:
 
@@ -172,9 +172,10 @@ defmodule X do
   end
 
   @doc """
-  By default all components are compiled with `inline` option for faster rendering.
-  `inline` option is disabled when extracting gettext to provide context aware AST.
-  To get faster code reload in developemnt `inline` option can be disabled via config:
+  Returns inline compilation option. By default all components are compiled
+  with `inline` option for faster rendering.  `inline` option is disabled when
+  extracting gettext to provide context aware AST.  To get faster code reload in
+  developemnt `inline` option can be disabled via config:
 
       config :x_component,
         compile_inline: false,
@@ -194,7 +195,7 @@ defmodule X do
   end
 
   @doc """
-  Root component module that is used by components generator and Phoenix.
+  Returns a root component module that is used by components generator and Phoenix.
 
       config :x_component,
         root_module: "MyApp.Components"
@@ -210,7 +211,7 @@ defmodule X do
   end
 
   @doc """
-  Components directory path used by generator task.
+  Returns components directory path used by generator task.
 
       config :x_component,
         root_path: "lib/my_app_web/components",
@@ -226,7 +227,8 @@ defmodule X do
   end
 
   @doc ~S"""
-  Elixir code snippet that will be added to the body of the component module created via generator task.
+  Returns Elixir code snippet that will be added to the body of the component module
+  created via generator task.
 
       config :x_component,
         generator_template: "\""

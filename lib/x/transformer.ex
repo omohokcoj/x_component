@@ -1,6 +1,6 @@
 defmodule X.Transformer do
   @moduledoc """
-  This module contains a set of functions to transform compiled Elixir AST
+  Contains a set of functions to transform compiled Elixir AST
   into more performance optimized AST.
   Also, it contains functions to transform Elixir AST for inline components.
   """
